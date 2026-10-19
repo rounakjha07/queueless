@@ -257,14 +257,147 @@ router.post("/book", protect, async (req, res) => {
   }
 });
 
+// 4.5 Customer: Get 100% Accurate Live Queue Status
+router.get("/customer-live-status", protect, async (req, res) => {
+  try {
+    const { startOfDay, endOfDay } = getTodayISTBoundaries();
+
+    const customerUser = await User.findById(req.user.id);
+    const userPhone = customerUser?.phone || "";
+    const last10 = userPhone.replace(/\D/g, "").slice(-10);
+
+    const queryConditions = [{ customerId: req.user.id }];
+    if (last10) {
+      queryConditions.push({ customerPhone: { $regex: new RegExp(last10 + "$") } });
+    }
+
+    // 1. First priority: Today's active token (waiting or serving)
+    let token = await Queue.findOne({
+      $or: queryConditions,
+      createdAt: { $gte: startOfDay, $lt: endOfDay },
+      status: { $in: ["waiting", "serving"] },
+    })
+      .populate("createdBy", "businessName name email")
+      .populate("servedBy", "name counterNumber")
+      .sort({ createdAt: -1 });
+
+    // 2. Second priority: Today's completed or cancelled token
+    if (!token) {
+      token = await Queue.findOne({
+        $or: queryConditions,
+        createdAt: { $gte: startOfDay, $lt: endOfDay },
+      })
+        .populate("createdBy", "businessName name email")
+        .populate("servedBy", "name counterNumber")
+        .sort({ createdAt: -1 });
+    }
+
+    // 3. Fallback: Recent all-time token
+    if (!token) {
+      token = await Queue.findOne({
+        $or: queryConditions,
+      })
+        .populate("createdBy", "businessName name email")
+        .populate("servedBy", "name counterNumber")
+        .sort({ createdAt: -1 });
+    }
+
+    if (!token) {
+      return res.json({
+        success: true,
+        hasActiveToken: false,
+        message: "No token found for this account.",
+      });
+    }
+
+    // Exact count of waiting customers ahead in the same service today
+    const peopleAhead = await Queue.countDocuments({
+      createdBy: token.createdBy?._id,
+      serviceName: token.serviceName,
+      status: "waiting",
+      tokenNumber: { $lt: token.tokenNumber },
+      createdAt: { $gte: startOfDay, $lt: endOfDay },
+    });
+
+    // Currently serving token at this service
+    const currentServing = await Queue.findOne({
+      createdBy: token.createdBy?._id,
+      serviceName: token.serviceName,
+      status: "serving",
+      createdAt: { $gte: startOfDay, $lt: endOfDay },
+    }).populate("servedBy", "name counterNumber");
+
+    // Dynamic wait minutes calculation
+    let estimatedWaitMinutes = 0;
+    if (token.status === "waiting") {
+      estimatedWaitMinutes = peopleAhead === 0 ? 2 : peopleAhead * 5;
+    }
+
+    let counterNumber = token.counterNumber || null;
+    let staffName = token.servedBy?.name || null;
+    if (token.status === "serving") {
+      counterNumber = token.counterNumber || currentServing?.counterNumber || "Counter 1";
+      staffName = token.servedBy?.name || currentServing?.servedBy?.name || "Counter Officer";
+    }
+
+    const tokenCode = `${token.serviceName.slice(0, 1).toUpperCase()}-${String(token.tokenNumber).padStart(3, "0")}`;
+
+    return res.json({
+      success: true,
+      hasActiveToken: true,
+      token: {
+        id: token._id,
+        tokenNumber: token.tokenNumber,
+        tokenCode,
+        serviceName: token.serviceName,
+        customerName: token.customerName,
+        customerPhone: token.customerPhone,
+        status: token.status,
+        peopleAhead,
+        estimatedWaitMinutes,
+        counterNumber,
+        staffName,
+        calledAt: token.calledAt,
+        completedAt: token.completedAt,
+        createdAt: token.createdAt,
+        provider: {
+          businessName: token.createdBy?.businessName || token.createdBy?.name || "Service Center",
+          name: token.createdBy?.name,
+        },
+        currentlyServing: currentServing
+          ? {
+              tokenNumber: currentServing.tokenNumber,
+              tokenCode: `${token.serviceName.slice(0, 1).toUpperCase()}-${String(currentServing.tokenNumber).padStart(3, "0")}`,
+              counterNumber: currentServing.counterNumber || "Counter 1",
+              customerName: currentServing.customerName,
+            }
+          : null,
+      },
+    });
+  } catch (error) {
+    console.error("Customer live status error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch customer live status.",
+    });
+  }
+});
+
 // 5. Customer: Get my active tokens & live ticket status
 router.get("/my-tokens", protect, async (req, res) => {
   try {
     const { startOfDay, endOfDay } = getTodayISTBoundaries();
 
-    const allMyTokens = await Queue.find({
-      customerId: req.user.id,
-    })
+    const customerUser = await User.findById(req.user.id);
+    const userPhone = customerUser?.phone || "";
+    const last10 = userPhone.replace(/\D/g, "").slice(-10);
+
+    const queryConditions = [{ customerId: req.user.id }];
+    if (last10) {
+      queryConditions.push({ customerPhone: { $regex: new RegExp(last10 + "$") } });
+    }
+
+    const allMyTokens = await Queue.find({ $or: queryConditions })
       .populate("createdBy", "businessName name")
       .sort({ createdAt: -1 });
 

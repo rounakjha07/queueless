@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 function Register() {
     const navigate = useNavigate();
-    const [role, setRole] = useState("customer"); // "customer", "manager", "staff"
+    const [role, setRole] = useState("manager"); // "manager", "staff"
     const [showPassword, setShowPassword] = useState(false);
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
@@ -91,9 +91,6 @@ function Register() {
                         </span>
 
                         <h2>
-                            {role === "customer" && (
-                                <>Skip the wait. <br />Book your <span>token.</span></>
-                            )}
                             {role === "manager" && (
                                 <>Get ahead <br />of the <span>queue.</span></>
                             )}
@@ -103,9 +100,8 @@ function Register() {
                         </h2>
 
                         <p>
-                            {role === "customer" && "Book virtual tokens, track wait times in real-time, and get notified right when it is your turn."}
-                            {role === "manager" && "Register your organization, onboard staff counters with unique invite codes, and oversee queues."}
-                            {role === "staff" && "Join your service center using your unique invite code and operate your assigned counter smoothly."}
+                            {role === "manager" && "Register your service center, create departments, invite staff members, and automate queues with QueueCopilot AI."}
+                            {role === "staff" && "Join your organization with your staff invite code and manage your live assigned counter smoothly."}
                         </p>
 
                         <div className="benefit-list">
@@ -159,10 +155,54 @@ function Register() {
                         </p>
 
                         {/* Role Selector Tabs */}
+                        {/* Customer Quick Access Banner */}
+                        <div
+                            style={{
+                                background: "#f0fdf4",
+                                border: "1px solid #bbf7d0",
+                                borderRadius: "12px",
+                                padding: "14px 16px",
+                                marginBottom: "20px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                gap: "12px",
+                                flexWrap: "wrap",
+                            }}
+                        >
+                            <div style={{ flex: 1, minWidth: "220px" }}>
+                                <strong style={{ display: "block", color: "#166534", fontSize: "13.5px", marginBottom: "2px" }}>
+                                    🎟️ Are you a Customer waiting for service?
+                                </strong>
+                                <span style={{ fontSize: "12px", color: "#15803d", lineHeight: "1.4" }}>
+                                    Customers don't need an account! Access your live queue directly using your Token Number & Phone OTP.
+                                </span>
+                            </div>
+                            <Link
+                                to="/customer"
+                                style={{
+                                    background: "#16a34a",
+                                    color: "#ffffff",
+                                    padding: "8px 14px",
+                                    borderRadius: "8px",
+                                    fontSize: "12.5px",
+                                    fontWeight: "700",
+                                    textDecoration: "none",
+                                    whiteSpace: "nowrap",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                }}
+                            >
+                                Track Live Token ↗
+                            </Link>
+                        </div>
+
+                        {/* Role Selector Tabs (Provider & Staff only) */}
                         <div
                             style={{
                                 display: "grid",
-                                gridTemplateColumns: "repeat(3, 1fr)",
+                                gridTemplateColumns: "repeat(2, 1fr)",
                                 gap: "8px",
                                 background: "#f1f5f9",
                                 padding: "6px",
@@ -170,25 +210,6 @@ function Register() {
                                 marginBottom: "22px",
                             }}
                         >
-                            <button
-                                type="button"
-                                onClick={() => { setRole("customer"); setMessage(""); }}
-                                style={{
-                                    padding: "10px 6px",
-                                    border: "none",
-                                    borderRadius: "8px",
-                                    fontWeight: 600,
-                                    fontSize: "13px",
-                                    cursor: "pointer",
-                                    background: role === "customer" ? "#ffffff" : "transparent",
-                                    color: role === "customer" ? "#1e293b" : "#64748b",
-                                    boxShadow: role === "customer" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
-                                    transition: "all 0.2s ease",
-                                }}
-                            >
-                                👤 Customer
-                            </button>
-
                             <button
                                 type="button"
                                 onClick={() => { setRole("manager"); setMessage(""); }}
@@ -224,7 +245,7 @@ function Register() {
                                     transition: "all 0.2s ease",
                                 }}
                             >
-                                🧑‍💼 Staff
+                                🧑‍💼 Staff Member
                             </button>
                         </div>
 

@@ -16,7 +16,7 @@ function App() {
 
                 <div className="nav-links">
                     <a href="#how-it-works">How it works</a>
-                    <Link to="/customer">Explore Services</Link>
+                    <Link to="/customer" style={{ fontWeight: "700", color: "#2563eb" }}>Track Live Token 🎟️</Link>
                 </div>
 
                 <div className="nav-actions">

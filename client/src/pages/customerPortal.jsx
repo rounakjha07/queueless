@@ -1,173 +1,362 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { playChime } from "../utils/audioChime";
 import "./customerPortal.css";
 
 export default function CustomerPortal() {
   const navigate = useNavigate();
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
-  const [activeTokens, setActiveTokens] = useState([]);
+  // Auth & Session state
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // Live Queue Telemetry state
+  const [liveToken, setLiveToken] = useState(null);
   const [pastTokens, setPastTokens] = useState([]);
-  const [services, setServices] = useState([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [bookingLoading, setBookingLoading] = useState(false);
+  const [telemetryLoading, setTelemetryLoading] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState("");
 
-  // Track if chime has played for a serving token to avoid repeat noise
+  // OTP Login states (when customer is not logged in)
+  const [tokenInput, setTokenInput] = useState("");
+  const [phoneInput, setPhoneInput] = useState("");
+  const [otpStep, setOtpStep] = useState(1); // 1 = Token & Phone, 2 = Enter OTP
+  const [otpInput, setOtpInput] = useState("");
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpError, setOtpError] = useState("");
+  const [otpSuccessMsg, setOtpSuccessMsg] = useState("");
+  const [devOtpBanner, setDevOtpBanner] = useState("");
+  const [tokenPreview, setTokenPreview] = useState(null);
+  const [countdown, setCountdown] = useState(0);
+
+  // Track chime playback to prevent repeat noise while token is serving
   const chimePlayedTokensRef = useRef(new Set());
 
-  // Check auth
+  // Check auth session
   useEffect(() => {
-    async function fetchUser() {
+    async function checkAuth() {
       try {
         const res = await fetch("http://localhost:5000/api/auth/me", {
           credentials: "include",
         });
         const data = await res.json();
-        if (!res.ok) {
-          navigate("/login", { replace: true });
-          return;
-        }
-        if (data.user?.role !== "customer") {
-          if (data.user?.role === "staff") {
-            navigate("/staff-portal", { replace: true });
+        if (res.ok && data.user) {
+          if (data.user.role === "customer") {
+            setUser(data.user);
           } else {
-            navigate("/dashboard", { replace: true });
+            // If staff or manager visited /customer, redirect to dashboard
+            navigate(data.user.role === "staff" ? "/staff-portal" : "/dashboard", { replace: true });
+            return;
           }
-          return;
         }
-        setUser(data.user);
-      } catch (err) {
-        setError("Unable to connect to QueueLess.");
+      } catch {
+        // Not logged in - will show OTP access form
       } finally {
-        setLoading(false);
+        setAuthLoading(false);
       }
     }
-    fetchUser();
+    checkAuth();
   }, [navigate]);
 
-  // Fetch customer tokens & available services
-  async function fetchCustomerData() {
+  // Countdown timer for OTP
+  useEffect(() => {
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [countdown]);
+
+  // Fetch 100% accurate live queue status
+  async function fetchLiveStatus() {
     try {
-      // 1. Customer tokens
-      const tokenRes = await fetch("http://localhost:5000/api/queue/my-tokens", {
+      const res = await fetch("http://localhost:5000/api/queue/customer-live-status", {
         credentials: "include",
       });
-      const tokenData = await tokenRes.json();
-      if (tokenRes.ok) {
-        setActiveTokens(tokenData.activeTokens || []);
-        setPastTokens(tokenData.pastTokens || []);
+      const data = await res.json();
+      if (res.ok && data.success && data.hasActiveToken) {
+        setLiveToken(data.token);
 
-        // Check if any token just switched to "serving"
-        tokenData.activeTokens?.forEach((tok) => {
-          if (tok.status === "serving" && !chimePlayedTokensRef.current.has(tok._id)) {
-            playChime();
-            chimePlayedTokensRef.current.add(tok._id);
-          }
-        });
+        // Audio chime when token transitions to serving
+        if (data.token.status === "serving" && !chimePlayedTokensRef.current.has(data.token.id)) {
+          playChime();
+          chimePlayedTokensRef.current.add(data.token.id);
+        }
+      } else {
+        setLiveToken(null);
       }
 
-      // 2. Available services
-      const srvRes = await fetch("http://localhost:5000/api/queue/explore");
-      const srvData = await srvRes.json();
-      if (srvRes.ok) {
-        setServices(srvData.services || []);
+      // Also fetch past token history
+      const historyRes = await fetch("http://localhost:5000/api/queue/my-tokens", {
+        credentials: "include",
+      });
+      const historyData = await historyRes.json();
+      if (historyRes.ok && historyData.pastTokens) {
+        setPastTokens(historyData.pastTokens);
       }
     } catch (err) {
-      console.error("Customer data fetch error:", err);
+      console.error("Live status error:", err);
     }
   }
 
+  // Polling for live queue telemetry
   useEffect(() => {
     if (!user) return;
-    fetchCustomerData();
-    const interval = setInterval(fetchCustomerData, 6000);
+    fetchLiveStatus();
+    const interval = setInterval(fetchLiveStatus, 3500);
     return () => clearInterval(interval);
   }, [user]);
 
-  // Book a new token
-  async function handleBookToken(service) {
-    setBookingLoading(true);
-    setFeedbackMsg("");
+  // Handle Step 1: Send OTP
+  async function handleSendOtp(e) {
+    e.preventDefault();
+    setOtpError("");
+    setOtpSuccessMsg("");
+    setDevOtpBanner("");
+    setOtpLoading(true);
+
     try {
-      const res = await fetch("http://localhost:5000/api/queue/book", {
+      const res = await fetch("http://localhost:5000/api/auth/customer/send-otp", {
         method: "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          serviceName: service.name,
-          managerId: service.managerId,
+          tokenNumber: tokenInput.trim(),
+          phone: phoneInput.trim(),
         }),
       });
-
       const data = await res.json();
+
       if (!res.ok) {
-        throw new Error(data.message || "Failed to book token.");
+        throw new Error(data.message || "Failed to find token or send OTP.");
       }
 
-      setFeedbackMsg(data.message);
-      await fetchCustomerData();
+      setOtpSuccessMsg(data.message);
+      setTokenPreview(data);
+      if (data.devOtp) {
+        setDevOtpBanner(data.devOtp);
+      }
+      setOtpStep(2);
+      setCountdown(45);
     } catch (err) {
-      setFeedbackMsg(err.message);
+      setOtpError(err.message);
     } finally {
-      setBookingLoading(false);
+      setOtpLoading(false);
     }
   }
 
-  // Cancel an active token
-  async function handleCancelToken(tokenId) {
-    const confirmCancel = window.confirm("Are you sure you want to cancel this token?");
-    if (!confirmCancel) return;
+  // Handle Step 2: Verify OTP
+  async function handleVerifyOtp(e) {
+    e.preventDefault();
+    setOtpError("");
+    setOtpLoading(true);
 
     try {
-      const res = await fetch(`http://localhost:5000/api/queue/${tokenId}/status`, {
-        method: "PATCH",
-        credentials: "include",
+      const res = await fetch("http://localhost:5000/api/auth/customer/verify-otp", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "cancelled" }),
+        credentials: "include",
+        body: JSON.stringify({
+          tokenNumber: tokenInput.trim(),
+          phone: phoneInput.trim(),
+          otp: otpInput.trim(),
+        }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to cancel.");
-      setFeedbackMsg("Token cancelled successfully.");
-      await fetchCustomerData();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Invalid OTP code.");
+      }
+
+      setUser(data.user);
+      setOtpStep(1);
+      setOtpInput("");
+      setDevOtpBanner("");
     } catch (err) {
-      setFeedbackMsg(err.message);
+      setOtpError(err.message);
+    } finally {
+      setOtpLoading(false);
     }
   }
 
+  // Handle Customer Logout / Switch Token
   async function handleLogout() {
-    await fetch("http://localhost:5000/api/auth/logout", {
-      method: "POST",
-      credentials: "include",
-    });
-    navigate("/login", { replace: true });
+    try {
+      await fetch("http://localhost:5000/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch {
+      // ignore
+    }
+    setUser(null);
+    setLiveToken(null);
+    setOtpStep(1);
+    setTokenInput("");
+    setPhoneInput("");
+    setOtpInput("");
   }
 
-  if (loading) {
+  if (authLoading) {
     return (
       <div className="cust-loading-wrap">
         <div className="cust-spinner" />
-        <p>Loading your Customer Portal...</p>
+        <p>Connecting to QueueLess Live Network...</p>
       </div>
     );
   }
 
-  if (error || !user) {
+  // ================= VIEW A: UNREGISTERED / NOT LOGGED IN CUSTOMER (OTP ACCESS) =================
+  if (!user) {
     return (
-      <div className="cust-loading-wrap">
-        <h2>{error || "Session expired."}</h2>
-        <button onClick={() => navigate("/login")}>Go to Login</button>
+      <div className="cust-otp-wrapper">
+        <div className="cust-otp-card">
+          <div className="cust-otp-header">
+            <div className="cust-otp-icon">🎟️</div>
+            <h1 className="cust-otp-title">Customer Live Token Portal</h1>
+            <p className="cust-otp-subtitle">
+              No registration or account needed! Enter your <b>Token Number</b> & <b>Phone</b> to track your live queue status.
+            </p>
+          </div>
+
+          {/* Realistic SMS Delivery Simulation Toast */}
+          {devOtpBanner && (
+            <div className="cust-simulated-sms-banner">
+              <span style={{ fontSize: "22px" }}>📱</span>
+              <div>
+                <strong style={{ display: "block", color: "#065f46", fontSize: "12.5px" }}>
+                  SMS Gateway: Instant OTP Generated!
+                </strong>
+                <span style={{ fontSize: "12.5px", color: "#047857" }}>
+                  Your verification code is:{" "}
+                  <b style={{ fontSize: "16px", letterSpacing: "2px", color: "#065f46" }}>
+                    {devOtpBanner}
+                  </b>{" "}
+                  (Valid for 5 mins)
+                </span>
+              </div>
+            </div>
+          )}
+
+          {otpError && (
+            <div style={{ background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", padding: "12px 14px", borderRadius: "10px", fontSize: "13px", marginBottom: "16px" }}>
+              ⚠️ {otpError}
+            </div>
+          )}
+
+          {otpSuccessMsg && !devOtpBanner && (
+            <div style={{ background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0", padding: "12px 14px", borderRadius: "10px", fontSize: "13px", marginBottom: "16px" }}>
+              ✓ {otpSuccessMsg}
+            </div>
+          )}
+
+          {/* STEP 1: Enter Token # & Phone */}
+          {otpStep === 1 && (
+            <form onSubmit={handleSendOtp} className="cust-otp-form">
+              <div className="cust-input-group">
+                <label>Token Number</label>
+                <input
+                  type="text"
+                  placeholder="e.g. 104 or B-104"
+                  value={tokenInput}
+                  onChange={(e) => setTokenInput(e.target.value)}
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div className="cust-input-group">
+                <label>Mobile Number (Provided at Counter)</label>
+                <input
+                  type="tel"
+                  placeholder="e.g. 9876543210"
+                  value={phoneInput}
+                  onChange={(e) => setPhoneInput(e.target.value)}
+                  required
+                />
+              </div>
+
+              <button type="submit" className="cust-submit-btn" disabled={otpLoading}>
+                {otpLoading ? "Checking Token Record..." : "Send Verification OTP 📲"}
+              </button>
+
+              <div style={{ textAlign: "center", marginTop: "14px" }}>
+                <Link to="/login" style={{ fontSize: "12.5px", color: "#64748b", textDecoration: "none" }}>
+                  Are you a Service Provider or Staff? <b>Log in here →</b>
+                </Link>
+              </div>
+            </form>
+          )}
+
+          {/* STEP 2: Enter OTP */}
+          {otpStep === 2 && (
+            <form onSubmit={handleVerifyOtp} className="cust-otp-form">
+              {tokenPreview && (
+                <div className="cust-token-preview-chip">
+                  <div>
+                    <span style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", display: "block" }}>
+                      Matched Token
+                    </span>
+                    <strong style={{ fontSize: "14px", color: "#1e293b" }}>
+                      {tokenPreview.tokenDisplay} ({tokenPreview.serviceName})
+                    </strong>
+                  </div>
+                  <span style={{ fontSize: "12px", background: "#dbeafe", color: "#1e40af", padding: "4px 8px", borderRadius: "6px", fontWeight: "700" }}>
+                    {tokenPreview.customerName}
+                  </span>
+                </div>
+              )}
+
+              <div className="cust-input-group">
+                <label>Enter 6-Digit OTP</label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  placeholder="• • • • • •"
+                  className="cust-otp-big-input"
+                  value={otpInput}
+                  onChange={(e) => setOtpInput(e.target.value)}
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <button type="submit" className="cust-submit-btn" disabled={otpLoading || otpInput.trim().length < 4}>
+                {otpLoading ? "Verifying..." : "Verify & Access Live Dashboard 🚀"}
+              </button>
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "10px" }}>
+                <button
+                  type="button"
+                  className="cust-back-btn"
+                  onClick={() => {
+                    setOtpStep(1);
+                    setOtpError("");
+                    setDevOtpBanner("");
+                  }}
+                >
+                  ← Change Token / Phone
+                </button>
+
+                <button
+                  type="button"
+                  className="cust-back-btn"
+                  disabled={countdown > 0}
+                  onClick={handleSendOtp}
+                  style={{ color: countdown > 0 ? "#94a3b8" : "#2563eb" }}
+                >
+                  {countdown > 0 ? `Resend OTP (${countdown}s)` : "Resend OTP"}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
       </div>
     );
   }
 
-  const filteredServices = services.filter((srv) =>
-    srv.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    srv.providerName.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // ================= VIEW B: AUTHENTICATED CUSTOMER LIVE DASHBOARD =================
+  const isServing = liveToken?.status === "serving";
+  const isWaiting = liveToken?.status === "waiting";
+  const isCompleted = liveToken?.status === "completed";
+  const isCancelled = liveToken?.status === "cancelled";
 
   return (
     <div className="cust-app">
@@ -175,23 +364,26 @@ export default function CustomerPortal() {
       <header className="cust-navbar">
         <div className="cust-brand">
           <span className="cust-logo-icon">Q</span>
-          <span className="cust-brand-title">QueueLess <b>Customer</b></span>
+          <span className="cust-brand-title">
+            QueueLess <b>Live Customer</b>
+          </span>
         </div>
 
         <div className="cust-user-nav">
           <div className="cust-user-badge">
-            <div className="cust-avatar">{user.name?.slice(0, 2).toUpperCase() || "CU"}</div>
-            <span>{user.name}</span>
+            <div className="cust-avatar">
+              {liveToken?.customerName?.slice(0, 2).toUpperCase() || user.name?.slice(0, 2).toUpperCase() || "CU"}
+            </div>
+            <span>{liveToken?.customerName || user.name}</span>
           </div>
-          <button className="cust-logout-btn" onClick={handleLogout}>
-            Logout ↗
+          <button className="cust-logout-btn" onClick={handleLogout} title="Switch or exit token session">
+            Switch Token ↗
           </button>
         </div>
       </header>
 
       {/* Main Container */}
       <main className="cust-container">
-        {/* Feedback Alert */}
         {feedbackMsg && (
           <div className="cust-feedback-banner">
             <span>📢 {feedbackMsg}</span>
@@ -199,178 +391,198 @@ export default function CustomerPortal() {
           </div>
         )}
 
-        {/* Hero Section: Active Tickets */}
+        {/* Master Live Queue Card */}
         <section className="cust-hero-section">
-          <div className="section-title-wrap">
-            <h2>My Live Queue Tokens</h2>
-            <p>Real-time updates on your wait time and position in line</p>
-          </div>
-
-          {activeTokens.length === 0 ? (
+          {!liveToken ? (
             <div className="no-active-ticket-card">
               <div className="ticket-empty-icon">🎟️</div>
-              <h3>No Active Tokens Right Now</h3>
-              <p>You are not currently waiting in any queues. Explore the available services below and book a digital token instantly!</p>
+              <h3>No Active Token in Queue</h3>
+              <p>You have no pending waiting tokens right now. If you just received a new token slip at the counter, click "Switch Token" above to track it!</p>
             </div>
           ) : (
-            <div className="active-tokens-grid">
-              {activeTokens.map((tok) => {
-                const isServing = tok.status === "serving";
-                return (
-                  <div
-                    key={tok._id}
-                    className={`live-ticket-card ${isServing ? "ticket-serving-now" : "ticket-waiting"}`}
-                  >
-                    <div className="ticket-top-row">
-                      <div>
-                        <span className="ticket-provider-badge">
-                          🏢 {tok.createdBy?.businessName || tok.createdBy?.name || "Service Provider"}
-                        </span>
-                        <h3 className="ticket-service-name">{tok.serviceName}</h3>
-                      </div>
+            <div className={`live-ticket-card ${isServing ? "ticket-serving-now" : "ticket-waiting"}`}>
+              {/* Top Row: Provider & Live Status Badge */}
+              <div className="ticket-top-row">
+                <div>
+                  <span className="ticket-provider-badge">
+                    🏢 {liveToken.provider?.businessName || liveToken.provider?.name || "Service Center"}
+                  </span>
+                  <h2 className="ticket-service-name">{liveToken.serviceName}</h2>
+                </div>
 
-                      <div className={`ticket-status-pill ${isServing ? "status-serving" : "status-waiting"}`}>
-                        <span className="status-dot" />
-                        {isServing ? "NOW SERVING!" : "WAITING IN QUEUE"}
-                      </div>
-                    </div>
+                <div className={`ticket-status-pill ${isServing ? "status-serving" : "status-waiting"}`}>
+                  <span className="status-dot" />
+                  {isServing && "NOW SERVING!"}
+                  {isWaiting && "WAITING IN QUEUE"}
+                  {isCompleted && "SERVICE COMPLETED"}
+                  {isCancelled && "TOKEN CANCELLED"}
+                </div>
+              </div>
 
-                    {/* Big Token Number */}
-                    <div className="token-number-hero">
-                      <span className="token-label">YOUR TOKEN</span>
-                      <strong className="token-code">
-                        {tok.serviceName.slice(0, 1).toUpperCase()}-
-                        {String(tok.tokenNumber).padStart(3, "0")}
-                      </strong>
-                    </div>
+              {/* Big Hero Token Badge */}
+              <div className="token-number-hero">
+                <span className="token-label">YOUR TOKEN CODE</span>
+                <strong className="token-code">{liveToken.tokenCode}</strong>
+                <span style={{ fontSize: "12px", color: "#64748b", marginTop: "4px", display: "block" }}>
+                  Customer: <b>{liveToken.customerName}</b> ({liveToken.customerPhone || user.phone})
+                </span>
+              </div>
 
-                    {/* Progress Info */}
-                    {isServing ? (
-                      <div className="serving-announcement-box">
-                        <span className="bell-icon">🔔</span>
-                        <div>
-                          <strong>IT'S YOUR TURN!</strong>
-                          <p>Please proceed to <b>{tok.counterNumber || "Counter 1"}</b> immediately.</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="ticket-metrics-row">
-                        <div className="metric-box">
-                          <span className="metric-num">{tok.peopleAhead}</span>
-                          <span className="metric-sub">People Ahead</span>
-                        </div>
-
-                        <div className="metric-box">
-                          <span className="metric-num">~{tok.dynamicWaitMinutes} min</span>
-                          <span className="metric-sub">Est. Wait Time</span>
-                        </div>
-
-                        <div className="metric-box">
-                          <span className="metric-num">
-                            {tok.currentServingToken
-                              ? `${tok.serviceName.slice(0, 1).toUpperCase()}-${String(tok.currentServingToken).padStart(3, "0")}`
-                              : "None"}
-                          </span>
-                          <span className="metric-sub">Serving Now</span>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="ticket-footer-row">
-                      <span className="ticket-timestamp">
-                        Issued at {new Date(tok.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                      {!isServing && (
-                        <button
-                          className="cancel-token-btn"
-                          onClick={() => handleCancelToken(tok._id)}
-                        >
-                          Cancel Token
-                        </button>
-                      )}
-                    </div>
+              {/* Progress & Live Telemetry Info */}
+              {isServing && (
+                <div className="serving-announcement-box" style={{ background: "#22c55e15", border: "2px solid #22c55e", padding: "18px 20px", borderRadius: "14px", marginTop: "18px", display: "flex", alignItems: "center", gap: "16px" }}>
+                  <span style={{ fontSize: "36px", animation: "pulse-node 1.2s infinite" }}>🔔</span>
+                  <div>
+                    <strong style={{ fontSize: "19px", color: "#15803d", display: "block" }}>
+                      IT'S YOUR TURN! PROCEED TO COUNTER
+                    </strong>
+                    <p style={{ margin: "4px 0 0", fontSize: "14.5px", color: "#166534" }}>
+                      Please proceed immediately to: <b style={{ fontSize: "17px", textDecoration: "underline" }}>{liveToken.counterNumber || "Counter 1"}</b>
+                      {liveToken.staffName && <span> (Staff: <b>{liveToken.staffName}</b>)</span>}
+                    </p>
                   </div>
-                );
-              })}
+                </div>
+              )}
+
+              {isWaiting && (
+                <div className="ticket-metrics-row">
+                  <div className="metric-box">
+                    <span className="metric-num" style={{ color: "#2563eb" }}>{liveToken.peopleAhead}</span>
+                    <span className="metric-sub">People Ahead</span>
+                  </div>
+
+                  <div className="metric-box">
+                    <span className="metric-num" style={{ color: "#059669" }}>
+                      {liveToken.estimatedWaitMinutes === 0 ? "Next!" : `~${liveToken.estimatedWaitMinutes} min`}
+                    </span>
+                    <span className="metric-sub">Est. Wait Time</span>
+                  </div>
+
+                  <div className="metric-box">
+                    <span className="metric-num" style={{ color: "#d97706" }}>
+                      {liveToken.currentlyServing ? liveToken.currentlyServing.tokenCode : "Waiting"}
+                    </span>
+                    <span className="metric-sub">
+                      {liveToken.currentlyServing ? `At ${liveToken.currentlyServing.counterNumber}` : "Counter Ready"}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {isCompleted && (
+                <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", padding: "16px 20px", borderRadius: "12px", marginTop: "16px", color: "#15803d" }}>
+                  <strong style={{ fontSize: "16px", display: "block", marginBottom: "4px" }}>
+                    ✓ Consultation / Service Completed
+                  </strong>
+                  <span>Your token #{liveToken.tokenCode} was served successfully. Thank you for using QueueLess!</span>
+                </div>
+              )}
+
+              {/* Visual Queue Timeline Progression */}
+              <div className="cust-timeline-box">
+                <div className="cust-timeline-title">Live Queue Progression</div>
+                <div className="cust-timeline-steps">
+                  <div className="cust-timeline-line">
+                    <div
+                      className="cust-timeline-line-progress"
+                      style={{
+                        width: isCompleted ? "100%" : isServing ? "70%" : "35%",
+                      }}
+                    />
+                  </div>
+
+                  {/* Step 1 */}
+                  <div className="cust-step-node">
+                    <div className="cust-node-circle active">✓</div>
+                    <span className="cust-node-label active">Token Issued</span>
+                  </div>
+
+                  {/* Step 2 */}
+                  <div className="cust-step-node">
+                    <div className={`cust-node-circle ${isWaiting || isServing || isCompleted ? "active" : ""}`}>
+                      {isWaiting ? "⏳" : "✓"}
+                    </div>
+                    <span className={`cust-node-label ${isWaiting ? "active" : ""}`}>
+                      {isWaiting ? `In Queue (${liveToken.peopleAhead} ahead)` : "Queue Cleared"}
+                    </span>
+                  </div>
+
+                  {/* Step 3 */}
+                  <div className="cust-step-node">
+                    <div className={`cust-node-circle ${isServing ? "current-serving" : isCompleted ? "active" : ""}`}>
+                      {isServing ? "🔔" : isCompleted ? "✓" : "3"}
+                    </div>
+                    <span className={`cust-node-label ${isServing ? "active" : ""}`}>
+                      {isServing ? "Called to Counter!" : "Counter Station"}
+                    </span>
+                  </div>
+
+                  {/* Step 4 */}
+                  <div className="cust-step-node">
+                    <div className={`cust-node-circle ${isCompleted ? "active" : ""}`}>
+                      {isCompleted ? "★" : "4"}
+                    </div>
+                    <span className={`cust-node-label ${isCompleted ? "active" : ""}`}>Done</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer Row */}
+              <div className="ticket-footer-row" style={{ marginTop: "18px" }}>
+                <span className="ticket-timestamp">
+                  Token generated at {new Date(liveToken.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </span>
+                <span style={{ fontSize: "12px", color: "#10b981", fontWeight: "700" }}>
+                  ● Live Auto-Sync Active (Updates every 3s)
+                </span>
+              </div>
             </div>
           )}
         </section>
 
-        {/* Explore & Book Services Section */}
-        <section className="cust-services-section">
-          <div className="services-header-row">
-            <div>
-              <h2>Explore & Book Services</h2>
-              <p>Find a counter, see current wait times, and get your virtual token</p>
+        {/* Service Details & Preparation Checklist */}
+        {liveToken && (
+          <section className="cust-guide-box">
+            <h3 className="cust-guide-title">
+              <span>📋</span> Service Information & Counter Checklist
+            </h3>
+
+            <div className="cust-guide-grid">
+              <div className="cust-guide-item">
+                <span className="cust-guide-item-icon">🪪</span>
+                <div className="cust-guide-item-text">
+                  <strong>Identification & Documents</strong>
+                  <p>Keep your original ID card, booking slip, and relevant department files ready in hand before reaching the counter.</p>
+                </div>
+              </div>
+
+              <div className="cust-guide-item">
+                <span className="cust-guide-item-icon">🔊</span>
+                <div className="cust-guide-item-text">
+                  <strong>Keep Sound Alert Enabled</strong>
+                  <p>When your turn arrives, an audio chime will play on your device. Please do not close this browser tab.</p>
+                </div>
+              </div>
+
+              <div className="cust-guide-item">
+                <span className="cust-guide-item-icon">📍</span>
+                <div className="cust-guide-item-text">
+                  <strong>Counter Reporting Policy</strong>
+                  <p>
+                    Please reach {liveToken.counterNumber || "the assigned counter"} within 2 minutes of your announcement to prevent token re-call.
+                  </p>
+                </div>
+              </div>
             </div>
+          </section>
+        )}
 
-            <div className="service-search-box">
-              <span className="search-icon">🔍</span>
-              <input
-                type="text"
-                placeholder="Search services or providers..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {filteredServices.length === 0 ? (
-            <div className="empty-services-card">
-              <p>No services match your search or no providers have registered services yet.</p>
-            </div>
-          ) : (
-            <div className="services-cards-grid">
-              {filteredServices.map((srv) => {
-                const alreadyBooked = activeTokens.some(
-                  (t) => t.serviceName === srv.name && t.createdBy?._id === srv.managerId
-                );
-                return (
-                  <div key={srv.id} className="service-booking-card">
-                    <div className="srv-card-top">
-                      <span className="srv-provider-tag">🏢 {srv.providerName}</span>
-                      <span className="srv-queue-tag">
-                        👥 {srv.waitingCount} in line
-                      </span>
-                    </div>
-
-                    <h3 className="srv-title">{srv.name}</h3>
-
-                    <div className="srv-stats-preview">
-                      <div>
-                        <span>Est. Wait</span>
-                        <strong>~{srv.estimatedWaitMinutes} mins</strong>
-                      </div>
-                      <div>
-                        <span>Now Serving</span>
-                        <strong>
-                          {srv.currentlyServingToken
-                            ? `${srv.name.slice(0, 1).toUpperCase()}-${String(srv.currentlyServingToken).padStart(3, "0")}`
-                            : "Idle"}
-                        </strong>
-                      </div>
-                    </div>
-
-                    <button
-                      className={`book-token-btn ${alreadyBooked ? "btn-already-booked" : ""}`}
-                      onClick={() => handleBookToken(srv)}
-                      disabled={bookingLoading || alreadyBooked}
-                    >
-                      {alreadyBooked ? "✓ Token Already Active" : "🎫 Get Token Now"}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-        {/* Past Token History */}
+        {/* Past Tokens History */}
         {pastTokens.length > 0 && (
-          <section className="cust-history-section">
+          <section className="cust-history-section" style={{ marginTop: "24px" }}>
             <div className="section-title-wrap">
-              <h2>My Token History</h2>
-              <p>Past visits and completed services</p>
+              <h2>My Previous Tokens</h2>
+              <p>Completed visits and history on this mobile number</p>
             </div>
 
             <div className="history-table-wrap">
@@ -385,15 +597,14 @@ export default function CustomerPortal() {
                   </tr>
                 </thead>
                 <tbody>
-                  {pastTokens.slice(0, 6).map((item) => (
+                  {pastTokens.slice(0, 5).map((item) => (
                     <tr key={item._id}>
                       <td>
                         <span className="hist-token-pill">
-                          {item.serviceName.slice(0, 1).toUpperCase()}-
-                          {String(item.tokenNumber).padStart(3, "0")}
+                          {item.serviceName.slice(0, 1).toUpperCase()}-{String(item.tokenNumber).padStart(3, "0")}
                         </span>
                       </td>
-                      <td><strong>{item.serviceName}</strong></td>
+                      <td><b>{item.serviceName}</b></td>
                       <td>{item.createdBy?.businessName || item.createdBy?.name || "Provider"}</td>
                       <td>{new Date(item.createdAt).toLocaleDateString()}</td>
                       <td>
