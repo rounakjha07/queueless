@@ -256,17 +256,17 @@ export default function CustomerPortal() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ email: customerEmail.trim(), password: customerPassword }),
+        body: JSON.stringify({ email: customerEmail.trim(), password: customerPassword, portalType: "customer" }),
       });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.message || "Invalid email or password.");
       }
-      if (data.user.role === "customer") {
-        setUser(data.user);
-      } else {
-        navigate(data.user.role === "staff" ? "/staff-portal" : "/dashboard", { replace: true });
+      if (data.user.role !== "customer") {
+        await fetch("http://localhost:5000/api/auth/logout", { method: "POST", credentials: "include" });
+        throw new Error("Yeh portal sirf Customers ke liye hai. Staff aur Manager accounts yaha login nahi kar sakte.");
       }
+      setUser(data.user);
     } catch (err) {
       setCustomerLoginError(err.message);
     } finally {

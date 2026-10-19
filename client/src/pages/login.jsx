@@ -45,6 +45,7 @@ function Login() {
         setLoading(true);
 
         try {
+            const portalType = loginTab === "customer" ? "customer" : "staff_provider";
             const response = await fetch(
                 "http://localhost:5000/api/auth/login",
                 {
@@ -53,7 +54,7 @@ function Login() {
                         "Content-Type": "application/json",
                     },
                     credentials: "include",
-                    body: JSON.stringify({ email: email.trim(), password }),
+                    body: JSON.stringify({ email: email.trim(), password, portalType }),
                 }
             );
 

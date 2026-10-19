@@ -205,7 +205,7 @@ const loginLimiter = rateLimit({
 
 router.post("/login", loginLimiter, async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { email, password, portalType } = req.body;
 
         if (
             typeof email !== "string" ||
@@ -237,6 +237,22 @@ router.post("/login", loginLimiter, async (req, res) => {
                 message: "Invalid email or password.",
             });
         }
+
+        // Strict role validation based on portal type
+        if (portalType === "customer" && user.role !== "customer") {
+            return res.status(403).json({
+                success: false,
+                message: "Yeh login sirf Customers ke liye hai. Staff aur Manager accounts Customer Portal par login nahi kar sakte. Kripya Staff & Provider tab se login karein.",
+            });
+        }
+
+        if (portalType === "staff_provider" && user.role === "customer") {
+            return res.status(403).json({
+                success: false,
+                message: "Yeh login sirf Staff aur Service Provider ke liye hai. Customer accounts kripya Customer login use karein.",
+            });
+        }
+
         if (!process.env.JWT_SECRET) {
             return res.status(500).json({
                 success: false,

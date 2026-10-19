@@ -36,7 +36,7 @@ function App() {
 
         <Route
           path="/staff-portal"
-          element={<Dashboard />}
+          element={<StaffPortal />}
         />
 
         <Route
