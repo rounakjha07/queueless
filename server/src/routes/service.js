@@ -5,11 +5,17 @@ import Queue from "../models/queue.js";
 
 const router = express.Router();
 
-// Get all services for logged-in manager
+// Get all services for logged-in manager or staff
 router.get("/", protect, async (req, res) => {
     try {
+        let managerId = req.user.id;
+        if (req.user.role === "staff") {
+            const staffUser = await User.findById(req.user.id);
+            managerId = staffUser?.managerId;
+        }
+
         const services = await Service.find({
-            createdBy: req.user.id,
+            createdBy: managerId,
         }).sort({ name: 1 });
 
         res.json({ success: true, services });
@@ -22,9 +28,15 @@ router.get("/", protect, async (req, res) => {
     }
 });
 
-// Add a new service
+// Add a new service (Managers only)
 router.post("/", protect, async (req, res) => {
     try {
+        if (req.user.role !== "manager") {
+            return res.status(403).json({
+                success: false,
+                message: "Only the Service Provider Head can create services.",
+            });
+        }
         const name = req.body.name?.trim();
 
         if (!name) {
@@ -80,9 +92,15 @@ router.post("/", protect, async (req, res) => {
     }
 });
 
- // Delete a service
+ // Delete a service (Managers only)
 router.delete("/:id", protect, async (req, res) => {
     try {
+        if (req.user.role !== "manager") {
+            return res.status(403).json({
+                success: false,
+                message: "Only the Service Provider Head can delete services.",
+            });
+        }
         // First, find the service owned by this manager
         const service = await Service.findOne({
             _id: req.params.id,

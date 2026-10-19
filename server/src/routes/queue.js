@@ -30,14 +30,16 @@ router.get("/", protect, async (req, res) => {
       query.createdBy = req.user.id;
     } else if (req.user.role === "staff") {
       const staffUser = await User.findById(req.user.id);
-      if (!staffUser?.managerId || !staffUser?.assignedService) {
+      if (!staffUser?.managerId) {
         return res.status(400).json({
           success: false,
-          message: "Staff member has no assigned manager or service.",
+          message: "Staff member has no assigned manager.",
         });
       }
       query.createdBy = staffUser.managerId;
-      query.serviceName = staffUser.assignedService;
+      if (req.query.service) {
+        query.serviceName = req.query.service;
+      }
     } else if (req.user.role === "customer") {
       query.customerId = req.user.id;
     }
@@ -57,7 +59,7 @@ router.get("/", protect, async (req, res) => {
   }
 });
 
-// 2. Get queue statistics for the logged-in manager
+// 2. Get queue statistics for the logged-in manager or staff
 router.get("/stats", protect, async (req, res) => {
   try {
     const { startOfDay, endOfDay } = getTodayISTBoundaries();
@@ -68,7 +70,11 @@ router.get("/stats", protect, async (req, res) => {
     if (req.user.role === "staff") {
       const staffUser = await User.findById(req.user.id);
       managerId = staffUser?.managerId;
-      serviceFilter = staffUser?.assignedService;
+      if (req.query.service) {
+        serviceFilter = req.query.service;
+      }
+    } else if (req.query.service) {
+      serviceFilter = req.query.service;
     }
 
     const query = { createdBy: managerId };

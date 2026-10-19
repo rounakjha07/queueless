@@ -7,6 +7,7 @@ import cookieParser from "cookie-parser";
 import authRoutes from "./routes/auth.js";
 import serviceRoutes from "./routes/service.js";
 import staffRoutes from "./routes/staff.js";
+import aiRoutes from "./routes/ai.js";
 
 
 dotenv.config();
@@ -39,6 +40,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/queue", queueRoutes);
 app.use("/api/services", serviceRoutes);
 app.use("/api/staff", staffRoutes);
+app.use("/api/ai", aiRoutes);
 
 async function startServer() {
   try {

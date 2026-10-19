@@ -1,0 +1,318 @@
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700;800;900&family=Plus+Jakarta+Sans:wght@600;700;800;900&display=swap");
+
+.tv-board-app {
+  min-height: 100vh;
+  background: #030712;
+  color: #f9fafb;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+.tv-header {
+  height: 90px;
+  padding: 0 48px;
+  background: #0b0f19;
+  border-bottom: 2px solid #1f2937;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tv-brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.tv-logo-box {
+  width: 52px;
+  height: 52px;
+  background: linear-gradient(135deg, #22c55e, #10b981);
+  color: #030712;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  font-size: 28px;
+  box-shadow: 0 0 24px rgba(34, 197, 94, 0.4);
+}
+
+.tv-brand h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+}
+
+.tv-brand h1 span {
+  color: #22c55e;
+}
+
+.tv-brand p {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+.tv-clock-pill {
+  background: #111827;
+  border: 1px solid #374151;
+  padding: 10px 22px;
+  border-radius: 40px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tv-clock-pill .live-dot {
+  width: 10px;
+  height: 10px;
+  background: #ef4444;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #ef4444;
+  animation: tv-pulse 1s infinite;
+}
+
+@keyframes tv-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(1.3); }
+}
+
+.tv-clock-digits {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 24px;
+  font-weight: 800;
+  color: #f9fafb;
+}
+
+.tv-date {
+  font-size: 13px;
+  color: #9ca3af;
+  border-left: 1px solid #374151;
+  padding-left: 12px;
+}
+
+/* Canvas */
+.tv-canvas {
+  flex: 1;
+  padding: 40px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+/* Now Serving Hero */
+.tv-serving-hero-card {
+  background: #0f172a;
+  border: 2px solid #22c55e55;
+  box-shadow: 0 0 40px rgba(34, 197, 94, 0.12);
+  border-radius: 24px;
+  padding: 36px 44px;
+}
+
+.tv-hero-label {
+  font-size: 18px;
+  font-weight: 900;
+  color: #22c55e;
+  letter-spacing: 2px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tv-idle-box {
+  text-align: center;
+  padding: 50px 20px;
+}
+
+.tv-idle-box h2 {
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: #6b7280;
+  margin: 0 0 12px;
+}
+
+.tv-idle-box p {
+  color: #9ca3af;
+  font-size: 16px;
+  margin: 0;
+}
+
+.tv-serving-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+}
+
+.tv-serving-counter-card {
+  background: #020617;
+  border: 1px solid #1e293b;
+  border-radius: 20px;
+  padding: 28px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+}
+
+.tv-card-station-pill {
+  display: inline-block;
+  background: #1e3a8a;
+  color: #60a5fa;
+  border: 1px solid #3b82f6;
+  font-weight: 800;
+  font-size: 14px;
+  padding: 6px 18px;
+  border-radius: 20px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.tv-token-giant {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 72px;
+  font-weight: 900;
+  color: #22c55e;
+  text-shadow: 0 0 28px rgba(34, 197, 94, 0.6);
+  letter-spacing: 3px;
+  margin-bottom: 8px;
+  line-height: 1;
+}
+
+.tv-service-caption {
+  font-size: 18px;
+  font-weight: 800;
+  color: #f3f4f6;
+}
+
+.tv-provider-caption {
+  font-size: 13px;
+  color: #9ca3af;
+  margin-top: 6px;
+}
+
+/* Bottom Departments Summary */
+.tv-bottom-summary {
+  background: #0f172a;
+  border: 1px solid #1f2937;
+  border-radius: 20px;
+  padding: 24px 32px;
+}
+
+.tv-summary-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.tv-summary-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: #9ca3af;
+}
+
+.tv-summary-header span {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.tv-departments-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.tv-dept-card {
+  background: #020617;
+  border: 1px solid #1e293b;
+  border-radius: 12px;
+  padding: 16px 20px;
+}
+
+.tv-dept-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.tv-dept-name {
+  font-weight: 800;
+  font-size: 15px;
+  color: #f3f4f6;
+}
+
+.tv-waiting-pill {
+  background: #374151;
+  color: #fbbf24;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 12px;
+}
+
+.tv-dept-bottom {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.tv-dept-bottom b {
+  color: #f3f4f6;
+}
+
+/* Footer Ticker */
+.tv-footer {
+  height: 60px;
+  background: #0b0f19;
+  border-top: 1px solid #1f2937;
+  padding: 0 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.tv-ticker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.ticker-badge {
+  background: #22c55e;
+  color: #030712;
+  font-weight: 900;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  letter-spacing: 1px;
+}
+
+.ticker-text {
+  font-size: 13px;
+  color: #9ca3af;
+  white-space: nowrap;
+}
+
+.tv-back-link {
+  color: #60a5fa;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.tv-back-link:hover {
+  text-decoration: underline;
+}

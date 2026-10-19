@@ -39,9 +39,7 @@ function Login() {
             setEmail("");
             setPassword("");
 
-            if (data.user.role === "staff") {
-                navigate("/staff-portal", { replace: true });
-            } else if (data.user.role === "customer") {
+            if (data.user.role === "customer") {
                 navigate("/customer", { replace: true });
             } else {
                 navigate("/dashboard", { replace: true });

@@ -6,6 +6,7 @@ import Register from "./pages/register";
 import Dashboard from "./pages/dashboard";
 import StaffPortal from "./pages/staffPortal";
 import CustomerPortal from "./pages/customerPortal";
+import DisplayBoard from "./pages/displayBoard";
 
 import "./App.css";
 
@@ -35,12 +36,17 @@ function App() {
 
         <Route
           path="/staff-portal"
-          element={<StaffPortal />}
+          element={<Dashboard />}
         />
 
         <Route
           path="/customer"
           element={<CustomerPortal />}
+        />
+
+        <Route
+          path="/display"
+          element={<DisplayBoard />}
         />
       </Routes>
     </BrowserRouter>

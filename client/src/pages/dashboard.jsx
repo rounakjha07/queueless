@@ -34,6 +34,7 @@ function Dashboard() {
 
     const [queueLoading, setQueueLoading] = useState(true);
     const [queueStatusFilter, setQueueStatusFilter] = useState("all");
+    const [selectedServiceFilter, setSelectedServiceFilter] = useState("all");
 
     // Add customer walk-in modal
     const [showAddCustomer, setShowAddCustomer] = useState(false);
@@ -63,6 +64,19 @@ function Dashboard() {
     const [lastGeneratedCode, setLastGeneratedCode] = useState("");
     const [callingNextLoading, setCallingNextLoading] = useState(false);
     const [seedingLoading, setSeedingLoading] = useState(false);
+
+    // AI Copilot state
+    const [aiInsights, setAiInsights] = useState(null);
+    const [aiInsightsLoading, setAiInsightsLoading] = useState(false);
+    const [aiMessages, setAiMessages] = useState([
+        {
+            sender: "assistant",
+            text: "Hello! I am **QueueCopilot AI**.\n\nI continuously monitor your live waiting hall, detect queue bottlenecks, forecast wait times, and can automatically execute dispatch tasks.\n\nAsk me any question or tell me what task you want to execute!",
+            action: null,
+        },
+    ]);
+    const [aiInput, setAiInput] = useState("");
+    const [aiChatLoading, setAiChatLoading] = useState(false);
 
     useEffect(() => {
         localStorage.setItem("queueless-theme", theme);
@@ -131,7 +145,24 @@ function Dashboard() {
         }
     }
 
-    // Authenticate manager
+    async function fetchAiInsights() {
+        setAiInsightsLoading(true);
+        try {
+            const res = await fetch("http://localhost:5000/api/ai/insights", {
+                credentials: "include",
+            });
+            const data = await res.json();
+            if (res.ok && data.insights) {
+                setAiInsights(data.insights);
+            }
+        } catch (err) {
+            console.error("AI Insights error:", err);
+        } finally {
+            setAiInsightsLoading(false);
+        }
+    }
+
+    // Authenticate manager or staff
     useEffect(() => {
         async function fetchUser() {
             try {
@@ -143,12 +174,12 @@ function Dashboard() {
                     navigate("/login", { replace: true });
                     return;
                 }
-                if (data.user?.role !== "manager") {
-                    if (data.user?.role === "staff") {
-                        navigate("/staff-portal", { replace: true });
-                    } else {
-                        navigate("/customer", { replace: true });
-                    }
+                if (data.user?.role === "customer") {
+                    navigate("/customer", { replace: true });
+                    return;
+                }
+                if (data.user?.role !== "manager" && data.user?.role !== "staff") {
+                    navigate("/login", { replace: true });
                     return;
                 }
                 setUser(data.user);
@@ -161,22 +192,93 @@ function Dashboard() {
         fetchUser();
     }, [navigate]);
 
-    // Initial load + Real-time auto-refresh polling every 8s
+    // Initial load + Real-time auto-refresh polling every 6s
     useEffect(() => {
         if (!user) return;
         fetchQueue();
         fetchStats();
         fetchServices();
-        fetchStaff();
+        if (user.role === "manager") {
+            fetchStaff();
+        }
+        fetchAiInsights();
 
         const interval = setInterval(() => {
             fetchQueue();
             fetchStats();
-            fetchStaff();
-        }, 8000);
+            if (user.role === "manager") {
+                fetchStaff();
+            }
+        }, 6000);
 
         return () => clearInterval(interval);
     }, [user]);
+
+    // AI Chat & Automation
+    async function handleSendAiChat(customPrompt) {
+        const promptToSend = (typeof customPrompt === "string" ? customPrompt : aiInput).trim();
+        if (!promptToSend) return;
+
+        setAiMessages((prev) => [...prev, { sender: "user", text: promptToSend }]);
+        setAiInput("");
+        setAiChatLoading(true);
+
+        try {
+            const res = await fetch("http://localhost:5000/api/ai/chat", {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message: promptToSend }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setAiMessages((prev) => [
+                    ...prev,
+                    {
+                        sender: "assistant",
+                        text: data.reply || "Task processed.",
+                        action: data.action || null,
+                    },
+                ]);
+            } else {
+                setAiMessages((prev) => [
+                    ...prev,
+                    { sender: "assistant", text: data.message || "Failed to process request." },
+                ]);
+            }
+        } catch {
+            setAiMessages((prev) => [
+                ...prev,
+                { sender: "assistant", text: "Error communicating with AI Copilot." },
+            ]);
+        } finally {
+            setAiChatLoading(false);
+        }
+    }
+
+    async function handleExecuteAiAction(action) {
+        if (!action) return;
+
+        if (action.type === "call_next") {
+            await handleCallNext(action.serviceName);
+            setAiMessages((prev) => [
+                ...prev,
+                { sender: "assistant", text: `⚡ Executed: Next ticket called for "${action.serviceName || "active queue"}". Web chime sounded!` },
+            ]);
+        } else if (action.type === "complete_token") {
+            await handleStatusChange(action.tokenId, "completed");
+            setAiMessages((prev) => [
+                ...prev,
+                { sender: "assistant", text: `✓ Executed: Token marked as completed successfully.` },
+            ]);
+        } else if (action.type === "seed_demo") {
+            await handleSeedDemoData();
+            setAiMessages((prev) => [
+                ...prev,
+                { sender: "assistant", text: `🚀 Executed: Realistic demo dataset loaded! Charts and metrics populated.` },
+            ]);
+        }
+    }
 
     // Seed Demo Sample Data
     async function handleSeedDemoData() {
@@ -191,7 +293,8 @@ function Dashboard() {
                 await fetchQueue();
                 await fetchStats();
                 await fetchServices();
-                await fetchStaff();
+                if (user?.role === "manager") await fetchStaff();
+                await fetchAiInsights();
             } else {
                 alert(data.message || "Failed to load demo data.");
             }
@@ -202,7 +305,7 @@ function Dashboard() {
         }
     }
 
-    // Add Service
+    // Add Service (Managers only)
     async function handleAddService(event) {
         event.preventDefault();
         const name = newServiceName.trim();
@@ -228,7 +331,7 @@ function Dashboard() {
         }
     }
 
-    // Delete Service
+    // Delete Service (Managers only)
     async function handleDeleteService(name) {
         if (!window.confirm(`Are you sure you want to delete "${name}"?`)) return;
         try {
@@ -301,8 +404,8 @@ function Dashboard() {
     }
 
     // Call Next Customer (with chime sound!)
-    async function handleCallNext(selectedService) {
-        const srv = selectedService || serviceName || services[0];
+    async function handleCallNext(customService) {
+        const srv = customService || (user?.role === "staff" ? user.assignedService : null) || serviceName || services[0];
         if (!srv) {
             alert("Please create or select a service first.");
             return;
@@ -330,7 +433,7 @@ function Dashboard() {
         }
     }
 
-    // Generate Staff Invite Code
+    // Generate Staff Invite Code (Managers only)
     async function handleGenerateStaffInvite(e) {
         e.preventDefault();
         if (!inviteServiceName) {
@@ -405,6 +508,33 @@ function Dashboard() {
         }
     }
 
+    // CSV Exporter for Customer Records
+    function handleExportCsv() {
+        if (filteredCustomers.length === 0) {
+            alert("No customer data to export.");
+            return;
+        }
+        const headers = ["Token Number", "Customer Name", "Phone", "Department", "Station", "Estimated Wait (min)", "Status", "Timestamp"];
+        const rows = filteredCustomers.map((c) => [
+            `"${c.serviceName ? c.serviceName.slice(0, 1).toUpperCase() : "T"}-${String(c.tokenNumber).padStart(3, "0")}"`,
+            `"${c.customerName || ""}"`,
+            `"${c.customerPhone || ""}"`,
+            `"${c.serviceName || ""}"`,
+            `"${c.counterNumber || "Counter 1"}"`,
+            c.estimatedWaitMinutes || 0,
+            c.status || "waiting",
+            `"${new Date(c.createdAt).toLocaleString()}"`,
+        ]);
+        const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `QueueLess_CustomerDirectory_${timeRange}_${todayIST}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
     if (loading) {
         return (
             <main className="qd-state">
@@ -425,7 +555,8 @@ function Dashboard() {
         );
     }
 
-    const displayName = user.businessName || user.name || "Provider Head";
+    const isStaff = user.role === "staff";
+    const displayName = user.businessName || user.name || (isStaff ? "Staff Member" : "Provider Head");
 
     // Date calculations (IST)
     const istDateFormatter = new Intl.DateTimeFormat("en-CA", {
@@ -449,7 +580,8 @@ function Dashboard() {
         const matchesSearch = item.customerName?.toLowerCase().includes(customerSearch.trim().toLowerCase()) ||
             item.serviceName?.toLowerCase().includes(customerSearch.trim().toLowerCase());
         const matchesStatus = queueStatusFilter === "all" || item.status === queueStatusFilter;
-        return matchesSearch && matchesStatus;
+        const matchesService = selectedServiceFilter === "all" || item.serviceName === selectedServiceFilter;
+        return matchesSearch && matchesStatus && matchesService;
     });
 
     // Service Breakdown for active time range
@@ -488,12 +620,14 @@ function Dashboard() {
 
     const initials = displayName.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
 
+    // Staff cannot see the Staff & Counters navigation
     const navItems = [
         { label: "Overview", icon: "📊" },
         { label: "Live Queue", icon: "⚡" },
-        { label: "Staff & Counters", icon: "🧑‍💼" },
+        ...(isStaff ? [] : [{ label: "Staff & Counters", icon: "🧑‍💼" }]),
         { label: "Customers", icon: "👥" },
         { label: "Services", icon: "🏢" },
+        { label: "AI Copilot 🤖", icon: "✨" },
     ];
 
     const isWorkspaceEmpty = queueData.length === 0 && services.length === 0;
@@ -535,7 +669,12 @@ function Dashboard() {
                         <div className="qd-user-avatar-modern">{initials}</div>
                         <div className="qd-user-details-modern">
                             <strong>{displayName}</strong>
-                            <span>Service Provider Head</span>
+                            <span>{isStaff ? "Staff Operator" : "Service Provider Head"}</span>
+                            {isStaff && (
+                                <span className="staff-badge-tag">
+                                    📍 {user.assignedService || "General"} · {user.counterNumber || "Counter 1"}
+                                </span>
+                            )}
                         </div>
                     </div>
 
@@ -560,6 +699,17 @@ function Dashboard() {
 
                     {/* Right side Header Controls */}
                     <div className="qd-header-right">
+                        {/* Waiting Room TV Display Board Link */}
+                        <a
+                            href="/display"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="qd-tv-link-btn"
+                            title="Open airport/bank style Waiting Room TV Display Board in a new window"
+                        >
+                            📺 Live TV Board ↗
+                        </a>
+
                         {/* Today vs All-Time Total Range Switcher */}
                         <div className="qd-range-segmented" title="Switch between Today and All-Time cumulative metrics">
                             <button
@@ -595,7 +745,7 @@ function Dashboard() {
                             ⚡ Call Next
                         </button>
 
-                        {/* Add Token */}
+                        {/* Add Walk-in Token */}
                         <button
                             className="qd-cta-glass-btn"
                             onClick={() => setShowAddCustomer(true)}
@@ -934,8 +1084,8 @@ function Dashboard() {
                         </section>
                     )}
 
-                    {/* ================= VIEW 3: STAFF & COUNTERS ================= */}
-                    {activeNav === "Staff & Counters" && (
+                    {/* ================= VIEW 3: STAFF & COUNTERS (MANAGERS ONLY) ================= */}
+                    {activeNav === "Staff & Counters" && !isStaff && (
                         <section className="qd-modern-panel">
                             <div className="panel-title-bar">
                                 <div>
@@ -1096,14 +1246,19 @@ function Dashboard() {
                                     <h3>Customer Directory</h3>
                                     <p>History of all customers who queued at your service center</p>
                                 </div>
-                                <div className="queue-search-input">
-                                    <span>🔍</span>
-                                    <input
-                                        type="search"
-                                        placeholder="Search customer name..."
-                                        value={customerSearch}
-                                        onChange={(e) => setCustomerSearch(e.target.value)}
-                                    />
+                                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                                    <button className="qd-export-csv-btn" onClick={handleExportCsv} title="Download customer database as CSV">
+                                        📥 Export CSV
+                                    </button>
+                                    <div className="queue-search-input">
+                                        <span>🔍</span>
+                                        <input
+                                            type="search"
+                                            placeholder="Search customer name..."
+                                            value={customerSearch}
+                                            onChange={(e) => setCustomerSearch(e.target.value)}
+                                        />
+                                    </div>
                                 </div>
                             </div>
 
@@ -1158,19 +1313,21 @@ function Dashboard() {
                                 </div>
                             </div>
 
-                            <form className="add-service-modern-form" onSubmit={handleAddService}>
-                                <input
-                                    type="text"
-                                    value={newServiceName}
-                                    onChange={(e) => setNewServiceName(e.target.value)}
-                                    placeholder="Enter new service name (e.g. Account Opening, Cash Deposit)"
-                                    maxLength={100}
-                                    required
-                                />
-                                <button type="submit" disabled={serviceLoading}>
-                                    {serviceLoading ? "Adding..." : "+ Create Service"}
-                                </button>
-                            </form>
+                            {!isStaff && (
+                                <form className="add-service-modern-form" onSubmit={handleAddService}>
+                                    <input
+                                        type="text"
+                                        value={newServiceName}
+                                        onChange={(e) => setNewServiceName(e.target.value)}
+                                        placeholder="Enter new service name (e.g. Account Opening, Cash Deposit)"
+                                        maxLength={100}
+                                        required
+                                    />
+                                    <button type="submit" disabled={serviceLoading}>
+                                        {serviceLoading ? "Adding..." : "+ Create Service"}
+                                    </button>
+                                </form>
+                            )}
 
                             {serviceMessage && (
                                 <p className={`service-msg ${serviceMessage.includes("success") ? "success" : "error"}`}>
@@ -1186,13 +1343,15 @@ function Dashboard() {
                                         <div key={srv} className="service-card-modern">
                                             <div className="service-card-top">
                                                 <h4>{srv}</h4>
-                                                <button
-                                                    className="delete-srv-btn"
-                                                    onClick={() => handleDeleteService(srv)}
-                                                    title="Delete Service"
-                                                >
-                                                    ✕
-                                                </button>
+                                                {!isStaff && (
+                                                    <button
+                                                        className="delete-srv-btn"
+                                                        onClick={() => handleDeleteService(srv)}
+                                                        title="Delete Service"
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                )}
                                             </div>
                                             <div className="service-metrics-row">
                                                 <div className="srv-stat">
@@ -1211,8 +1370,192 @@ function Dashboard() {
                         </section>
                     )}
 
+                    {/* ================= VIEW 6: AI COPILOT & AUTOMATION ================= */}
+                    {activeNav === "AI Copilot 🤖" && (
+                        <div className="ai-copilot-panel">
+                            {/* AI Insights Header & Cards */}
+                            <div className="ai-header-badge-row">
+                                <div>
+                                    <h3 style={{ margin: "0 0 4px", fontSize: "18px", fontWeight: "800" }}>
+                                        QueueCopilot Autonomous Intelligence
+                                    </h3>
+                                    <p style={{ margin: 0, fontSize: "13px", color: "var(--text-dim)" }}>
+                                        Real-time operational optimization, bottleneck detection, and predictive dispatching
+                                    </p>
+                                </div>
+                                <span className="ai-intelligence-pill">
+                                    <span className="ai-online-dot" /> Autonomous Agent Active
+                                </span>
+                            </div>
+
+                            {/* 3 AI Analytics Cards */}
+                            <div className="ai-cards-grid">
+                                <article className="ai-card">
+                                    <div className="ai-card-glow-line" />
+                                    <div className="ai-card-top">
+                                        <span className="ai-card-title">System Efficiency</span>
+                                        <span className="ai-card-icon">⚡</span>
+                                    </div>
+                                    <div className="ai-score-row">
+                                        <span className="ai-score-big">{aiInsights?.efficiencyScore || 95}%</span>
+                                        <span className="ai-score-label">OPTIMAL</span>
+                                    </div>
+                                    <p className="ai-card-desc">
+                                        Calculated from live throughput and customer clearance velocity.
+                                    </p>
+                                </article>
+
+                                <article className="ai-card">
+                                    <div className="ai-card-glow-line" />
+                                    <div className="ai-card-top">
+                                        <span className="ai-card-title">Bottleneck Audit</span>
+                                        <span className="ai-card-icon">🔍</span>
+                                    </div>
+                                    {aiInsights?.maxWaitersInBottleneck >= 2 ? (
+                                        <>
+                                            <span className="ai-alert-badge warning">
+                                                High Load in "{aiInsights?.bottleneckService}"
+                                            </span>
+                                            <p className="ai-card-desc">
+                                                {aiInsights?.maxWaitersInBottleneck} customer(s) are waiting for this department.
+                                            </p>
+                                            <button
+                                                className="ai-auto-call-btn"
+                                                onClick={() => handleCallNext(aiInsights?.bottleneckService)}
+                                            >
+                                                ⚡ Auto-Call in {aiInsights?.bottleneckService}
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="ai-alert-badge optimal">No Bottlenecks Detected</span>
+                                            <p className="ai-card-desc">
+                                                All counters are operating smoothly without queue congestion.
+                                            </p>
+                                        </>
+                                    )}
+                                </article>
+
+                                <article className="ai-card">
+                                    <div className="ai-card-glow-line" />
+                                    <div className="ai-card-top">
+                                        <span className="ai-card-title">Traffic Forecast</span>
+                                        <span className="ai-card-icon">📈</span>
+                                    </div>
+                                    <div className="ai-score-row">
+                                        <span className="ai-score-big">~{aiInsights?.projectedNextHourLoad || 3}</span>
+                                        <span className="ai-score-label" style={{ color: "#38bdf8" }}>arr/hr</span>
+                                    </div>
+                                    <p className="ai-card-desc">
+                                        Anticipated customer arrivals in the next hour based on queue trends.
+                                    </p>
+                                </article>
+                            </div>
+
+                            {/* Copilot Chat & Automation Engine */}
+                            <div className="ai-chat-terminal">
+                                <div className="ai-chat-header">
+                                    <div className="ai-chat-header-title">
+                                        <span>🤖</span>
+                                        <span>Interactive QueueCopilot Assistant</span>
+                                    </div>
+                                    <span style={{ fontSize: "11px", color: "var(--text-dim)", fontFamily: "monospace" }}>
+                                        NATURAL LANGUAGE ENGINE
+                                    </span>
+                                </div>
+
+                                <div className="ai-chat-messages-container">
+                                    {aiMessages.map((msg, index) => (
+                                        <div key={index} className={`chat-bubble-wrap ${msg.sender}`}>
+                                            <div className="ai-bubble-avatar">
+                                                {msg.sender === "assistant" ? "🤖" : "👤"}
+                                            </div>
+                                            <div className="chat-bubble-content">
+                                                <div style={{ whiteSpace: "pre-wrap" }}>{msg.text}</div>
+                                                {msg.action && (
+                                                    <div className="chat-action-widget">
+                                                        <span style={{ fontSize: "12px", color: "var(--text-main)" }}>
+                                                            Suggested Action: <b>{msg.action.label}</b>
+                                                        </span>
+                                                        <button
+                                                            className="chat-action-btn"
+                                                            onClick={() => handleExecuteAiAction(msg.action)}
+                                                        >
+                                                            {msg.action.label}
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {aiChatLoading && (
+                                        <div className="chat-bubble-wrap assistant">
+                                            <div className="ai-bubble-avatar">🤖</div>
+                                            <div className="chat-bubble-content">
+                                                <span>Thinking and analyzing live queue telemetry...</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Suggested Prompts */}
+                                <div className="chat-suggested-prompts">
+                                    <button
+                                        className="suggested-prompt-chip"
+                                        onClick={() => handleSendAiChat("Where is the biggest queue bottleneck right now?")}
+                                    >
+                                        🔍 Queue Bottlenecks
+                                    </button>
+                                    <button
+                                        className="suggested-prompt-chip"
+                                        onClick={() => handleSendAiChat("Who should be called next to the counter?")}
+                                    >
+                                        ⚡ Call Next Customer
+                                    </button>
+                                    <button
+                                        className="suggested-prompt-chip"
+                                        onClick={() => handleSendAiChat("Give me today's performance summary report")}
+                                    >
+                                        📊 Daily Summary
+                                    </button>
+                                    <button
+                                        className="suggested-prompt-chip"
+                                        onClick={() => handleSendAiChat("What is the projected wait time and peak hour forecast?")}
+                                    >
+                                        ⏱️ Wait Time Forecast
+                                    </button>
+                                    <button
+                                        className="suggested-prompt-chip"
+                                        onClick={() => handleSendAiChat("Show active staff members and their stations")}
+                                    >
+                                        🧑‍💼 Staff Stations
+                                    </button>
+                                </div>
+
+                                {/* Chat Input Row */}
+                                <form
+                                    className="ai-chat-input-row"
+                                    onSubmit={(e) => {
+                                        e.preventDefault();
+                                        handleSendAiChat();
+                                    }}
+                                >
+                                    <input
+                                        type="text"
+                                        placeholder="Ask a question or command (e.g. 'Call next in General', 'Summary', 'Bottleneck')..."
+                                        value={aiInput}
+                                        onChange={(e) => setAiInput(e.target.value)}
+                                    />
+                                    <button type="submit" className="ai-send-btn" disabled={aiChatLoading || !aiInput.trim()}>
+                                        Send →
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
                     <footer className="qd-modern-footer">
-                        <span>© 2026 QueueLess · High-Performance Smart Queue System</span>
+                        <span>© 2026 QueueLess · High-Performance Smart Queue System · Hackathon Edition</span>
                     </footer>
                 </div>
             </main>
