@@ -14,12 +14,12 @@ export default function QueueActivityChart({ data = [] }) {
     { from: "#e11d48", to: "#fb7185", glow: "rgba(244, 63, 94, 0.4)" }, // Rose
   ];
 
-  if (data.length === 0 || data.every((item) => item.count === 0)) {
+  if (data.length === 0) {
     return (
       <div className="qa-modern-empty">
         <span className="qa-empty-glyph">📊</span>
-        <h4>No Queue Activity Yet</h4>
-        <p>Activity will dynamically populate as customers get assigned tokens.</p>
+        <h4>No Services Configured</h4>
+        <p>Add departments or load demo dataset to view activity distribution.</p>
       </div>
     );
   }

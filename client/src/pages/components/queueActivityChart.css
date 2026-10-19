@@ -1,11 +1,14 @@
 .qa-chart-container {
   width: 100%;
+  max-width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
+  display: block;
   padding: 8px 4px 10px;
   box-sizing: border-box;
   scrollbar-width: thin;
   scrollbar-color: rgba(99, 102, 241, 0.4) transparent;
+  -webkit-overflow-scrolling: touch;
 }
 
 .qa-chart-container::-webkit-scrollbar {
@@ -58,8 +61,8 @@
   width: max-content;
   min-width: 100%;
   justify-content: flex-start;
-  gap: 26px;
-  padding-right: 20px;
+  gap: 24px;
+  padding-right: 24px;
 }
 
 .qa-bar-col {
@@ -69,6 +72,7 @@
   justify-content: flex-end;
   width: 74px;
   min-width: 74px;
+  flex-shrink: 0;
   height: 100%;
 }
 
