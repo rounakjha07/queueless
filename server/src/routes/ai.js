@@ -177,7 +177,64 @@ Current Service Center Context:
 
     const activeApiKey = (req.headers["x-openai-key"] || req.body.apiKey || process.env.OPENAI_API_KEY || "").trim();
 
-    // 1. If OpenAI API key is configured (via header, body, or .env)
+    // 1. If Gemini API key is provided (starts with AIza)
+    if (activeApiKey.startsWith("AIza")) {
+      try {
+        const geminiRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${activeApiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    {
+                      text: `You are QueueCopilot AI for QueueLess. Context:\n${contextSummary}\n\nInstructions: Answer the user's question clearly in the language asked. If asking to call someone, end with: ACTION: {"type": "call_next", "serviceName": "<ServiceName>", "label": "Call Next"}\nUser Query: ${message}`,
+                    },
+                  ],
+                },
+              ],
+            }),
+          }
+        );
+        const geminiData = await geminiRes.json();
+        const geminiText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (geminiText) {
+          let rawText = geminiText;
+          let action = null;
+          const actionMatch = rawText.match(/ACTION:\s*(\{.*\})/);
+          if (actionMatch) {
+            try {
+              action = JSON.parse(actionMatch[1]);
+              rawText = rawText.replace(/ACTION:\s*\{.*\}/, "").trim();
+            } catch (e) {
+              console.warn("Failed to parse Gemini ACTION json:", e);
+            }
+          }
+          return res.json({
+            success: true,
+            reply: rawText,
+            action,
+            provider: "Google Gemini 1.5 Flash (Live AI)",
+          });
+        } else if (geminiData.error) {
+          return res.json({
+            success: true,
+            reply: `⚠️ **Gemini API Error**: ${geminiData.error.message}`,
+            provider: "Gemini Error",
+          });
+        }
+      } catch (gemErr) {
+        return res.json({
+          success: true,
+          reply: `⚠️ **Gemini Connection Error**: ${gemErr.message}`,
+          provider: "Gemini Error",
+        });
+      }
+    }
+
+    // 2. If OpenAI ChatGPT API key is provided (starts with sk- or configured in env)
     if (activeApiKey) {
       try {
         const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -191,8 +248,8 @@ Current Service Center Context:
             messages: [
               {
                 role: "system",
-                content: `You are QueueCopilot AI, an intelligent queue optimization assistant for QueueLess. You analyze queue bottlenecks, advise service managers and counter staff, automate customer call tasks, and give crisp, professional responses.
-Answer questions in the language the user asked (English, Hindi, or Hinglish). Keep responses concise, clear, and actionable.
+                content: `You are QueueCopilot AI, an intelligent queue optimization assistant for QueueLess. You analyze queue bottlenecks, advise service managers and counter staff, automate customer call tasks, and answer ANY general or operational question with high intelligence.
+Answer questions in the language the user asked (English, Hindi, or Hinglish). Keep responses crisp, clear, and actionable.
 
 ${contextSummary}
 
@@ -239,10 +296,20 @@ Do not output ACTION if no specific action is needed.`,
             provider: "OpenAI ChatGPT (GPT-4o-mini)",
           });
         } else if (aiData.error) {
-          console.warn("OpenAI API returned error:", aiData.error.message);
+          console.error("OpenAI API returned error:", aiData.error);
+          return res.json({
+            success: true,
+            reply: `⚠️ **OpenAI ChatGPT API Error**: ${aiData.error.message}\n\n*(Error Code: \`${aiData.error.code || aiData.error.type || "unknown"}\`)*\n\n> **Kyu hua ye?**: Agar aapne naya OpenAI API key banaya hai bina billing add kiye, toh OpenAI \`insufficient_quota\` error deta hai. Check your balance at [platform.openai.com/account/billing](https://platform.openai.com/account/billing).\n\n💡 **Tip**: Agar aapke paas OpenAI ka paid quota nahi hai, toh aap Google Gemini ka **FREE API key** ([aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)) bhi use kar sakte hain — ye 100% free hai!`,
+            provider: "OpenAI API Error",
+          });
         }
       } catch (openAiErr) {
-        console.warn("OpenAI API call failed, falling back to built-in smart assistant:", openAiErr.message);
+        console.error("OpenAI API call failed:", openAiErr);
+        return res.json({
+          success: true,
+          reply: `⚠️ **OpenAI Connection Failed**: ${openAiErr.message}. Make sure your system can reach api.openai.com.`,
+          provider: "OpenAI Error",
+        });
       }
     }
 
@@ -406,12 +473,8 @@ All assigned staff operators can manage their counters simultaneously in real-ti
     }
     // H. Query: What is QueueLess / How it Works / Help
     else if (
-      lower.includes("what is") ||
-      lower.includes("how does") ||
-      lower.includes("help") ||
-      lower.includes("kya hai") ||
-      lower.includes("kaise") ||
-      lower.includes("features")
+      (lower.includes("what is") || lower.includes("how does") || lower.includes("kya hai") || lower.includes("kaise") || lower.includes("help") || lower.includes("features")) &&
+      (lower.includes("queueless") || lower.includes("queue") || lower.includes("system") || lower.includes("app") || lower.includes("project") || lower.includes("software") || lower.includes("work"))
     ) {
       reply = `💡 **QueueLess Smart Ecosystem Overview**:
 1. **Multi-Role Flow**:
@@ -423,15 +486,7 @@ All assigned staff operators can manage their counters simultaneously in real-ti
     }
     // General Conversational Response
     else {
-      reply = `🤖 **QueueCopilot Active**: I am monitoring your queue operations in real-time.
-- Current Status: **${waiting.length} waiting**, **${serving.length} serving**, **${completed.length} completed**.
-- Active Departments: ${serviceNames.join(", ") || "None registered yet"}.
-
-You can ask me to:
-- *"Call next customer in General Medicine"*
-- *"Where is the biggest queue bottleneck?"*
-- *"Show today's performance summary"*
-- *"Forecast wait times for new arrivals"*`;
+      reply = `🤖 **QueueCopilot**: You asked: *"${message}"*\n\nMain live queue dispatching aur bottleneck diagnostics ke liye optimized hu. Abhi live queue mein **${waiting.length} waiting**, **${serving.length} serving**, aur **${completed.length} completed** customer tickets hain.\n\n💡 **Note**: Agar aapne ChatGPT API key connect ki hai aur ye message dikh raha hai, toh iska matlab aapki OpenAI key par \`insufficient_quota\` error aaya hai. Aap Google Gemini ka **FREE API key** ([aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)) use kar sakte hain jo bina kisi billing ke 100% free chalta hai!`;
     }
 
     return res.json({

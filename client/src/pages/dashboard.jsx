@@ -825,15 +825,15 @@ function Dashboard() {
                         </div>
                     )}
 
-                    {/* Configure ChatGPT API Key Modal */}
+                    {/* Configure ChatGPT / Gemini API Key Modal */}
                     {showKeyModal && (
                         <div className="qd-modal-card" style={{ maxWidth: "560px" }}>
                             <div className="modal-header">
-                                <h3>⚡ Connect ChatGPT API (OpenAI GPT-4o-mini)</h3>
+                                <h3>⚡ Connect Live AI (ChatGPT or Google Gemini)</h3>
                                 <button className="modal-close" onClick={() => setShowKeyModal(false)}>✕</button>
                             </div>
                             <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 16px", lineHeight: "1.5" }}>
-                                Enter your OpenAI API key below. QueueCopilot will use <b>GPT-4o-mini</b> for hyper-responsive queue orchestration, dispatch recommendations, and natural language query answering.
+                                Enter your <b>OpenAI API Key</b> (<code>sk-proj-...</code>) or <b>Google Gemini Key</b> (<code>AIzaSy...</code>) below. QueueCopilot will use live generative AI to answer any question, execute tasks, and optimize queues.
                             </p>
                             <form
                                 onSubmit={(e) => {
@@ -842,13 +842,13 @@ function Dashboard() {
                                     localStorage.setItem("queueless-openai-key", clean);
                                     setOpenAiKey(clean);
                                     setShowKeyModal(false);
-                                    alert(clean ? "ChatGPT API Key configured! GPT-4o-mini is now active." : "API key cleared. Built-in engine will be used.");
+                                    alert(clean ? "Live AI Key saved! Active AI is now powering your assistant." : "API key cleared. Built-in engine will be used.");
                                 }}
                                 className="modal-form-grid"
                             >
                                 <input
                                     type="password"
-                                    placeholder="sk-proj-..."
+                                    placeholder="Paste sk-proj-... (OpenAI) or AIzaSy... (Gemini)"
                                     value={keyInput}
                                     onChange={(e) => setKeyInput(e.target.value)}
                                     required={!openAiKey}

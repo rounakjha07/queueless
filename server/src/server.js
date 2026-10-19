@@ -19,6 +19,8 @@ app.use(
   cors({
     origin: "http://localhost:5173",
     credentials: true,
+    allowedHeaders: ["Content-Type", "Authorization", "x-openai-key"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   })
 );
 
