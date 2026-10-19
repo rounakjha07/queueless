@@ -34,6 +34,11 @@ export default function CustomerPortal() {
   const [tokenPreview, setTokenPreview] = useState(null);
   const [countdown, setCountdown] = useState(0);
 
+  // Manual counter token lookup state
+  const [manualTokenInput, setManualTokenInput] = useState("");
+  const [manualTrackError, setManualTrackError] = useState("");
+  const [manualTrackLoading, setManualTrackLoading] = useState(false);
+
   // Track chime playback to prevent repeat noise while token is serving
   const chimePlayedTokensRef = useRef(new Set());
 
@@ -147,7 +152,7 @@ export default function CustomerPortal() {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.message || "Failed to find token or send OTP.");
+        throw new Error(data.message || "Aap kisi service me enrolled nahi ho.");
       }
 
       setOtpSuccessMsg(data.message);
@@ -195,6 +200,41 @@ export default function CustomerPortal() {
       setOtpError(err.message);
     } finally {
       setOtpLoading(false);
+    }
+  }
+
+  const handleSendCustomerOtp = handleSendOtp;
+  const handleVerifyCustomerOtp = handleVerifyOtp;
+
+  // Handle Manual Counter Token Search (when customer wants to track a slip)
+  async function handleManualTrack(e) {
+    if (e) e.preventDefault();
+    if (!manualTokenInput.trim()) {
+      setManualTrackError("Aap kisi service me enrolled nahi ho. Kripya counter token number enter karein.");
+      return;
+    }
+    setManualTrackLoading(true);
+    setManualTrackError("");
+    try {
+      const parsed = parseInt(manualTokenInput.replace(/\D/g, ""), 10);
+      if (isNaN(parsed) || parsed <= 0) {
+        throw new Error("Aap kisi service me enrolled nahi ho. Kripya valid token number darj karein (e.g. 5 ya A-005).");
+      }
+
+      const res = await fetch(`http://localhost:5000/api/queue/track-public?tokenNumber=${parsed}`);
+      const data = await res.json();
+      if (!res.ok || !data.success || !data.token) {
+        throw new Error(data.message || `Aap kisi service me enrolled nahi ho. Token #${parsed} ka koi active record nahi mila.`);
+      }
+
+      setLiveToken(data.token);
+      setFeedbackMsg(`✓ Token #${data.token.tokenNumber} (${data.token.serviceName}) ka live telemetry load ho gaya!`);
+      setManualTrackError("");
+      setManualTokenInput("");
+    } catch (err) {
+      setManualTrackError(err.message);
+    } finally {
+      setManualTrackLoading(false);
     }
   }
 
@@ -327,7 +367,7 @@ export default function CustomerPortal() {
               </div>
 
               <button type="submit" className="cust-submit-btn" disabled={otpLoading}>
-                {otpLoading ? "Checking Token Record..." : "Send Verification OTP 📲"}
+                {otpLoading ? "Checking Token Record..." : "Track Token 🚀"}
               </button>
 
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "14px", fontSize: "12.5px" }}>
@@ -470,8 +510,60 @@ export default function CustomerPortal() {
           {!liveToken ? (
             <div className="no-active-ticket-card">
               <div className="ticket-empty-icon">🎟️</div>
-              <h3>No Active Token in Queue</h3>
-              <p>You are not currently waiting in any line. Browse the service providers below and tap any service to get a token and navigate to the center!</p>
+              <h3 style={{ fontSize: "21px", color: "#1e293b", margin: "6px 0", fontWeight: "800" }}>
+                Aap kisi service me enrolled nahi ho
+              </h3>
+              <span style={{ fontSize: "13px", color: "#64748b", fontWeight: "700", display: "block", marginBottom: "8px" }}>
+                (No Active Token Generated)
+              </span>
+              <p style={{ color: "#475569", fontSize: "14px", maxWidth: "520px", margin: "0 auto 18px", lineHeight: "1.5" }}>
+                Aapka filhaal kisi bhi service provider ke paas koi active queue token generate nahi hua hai. Agar aapne physical counter se token slip li hai, to neeche apna Token Number daal kar live status track karein!
+              </p>
+
+              {/* Inline Counter Slip Token Tracker */}
+              <form onSubmit={handleManualTrack} style={{ display: "flex", gap: "8px", maxWidth: "440px", margin: "0 auto 14px", width: "100%" }}>
+                <input
+                  type="text"
+                  placeholder="e.g. 5 ya A-005"
+                  value={manualTokenInput}
+                  onChange={(e) => setManualTokenInput(e.target.value)}
+                  style={{
+                    flex: 1,
+                    padding: "10px 14px",
+                    borderRadius: "10px",
+                    border: "1px solid #cbd5e1",
+                    fontSize: "14px",
+                    outline: "none",
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={manualTrackLoading}
+                  style={{
+                    padding: "10px 18px",
+                    borderRadius: "10px",
+                    border: "none",
+                    background: "#2563eb",
+                    color: "#ffffff",
+                    fontWeight: "700",
+                    fontSize: "13.5px",
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {manualTrackLoading ? "Searching..." : "Track Token 🔍"}
+                </button>
+              </form>
+
+              {manualTrackError && (
+                <div style={{ background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", padding: "10px 14px", borderRadius: "10px", fontSize: "13px", maxWidth: "440px", margin: "0 auto 16px", fontWeight: "600" }}>
+                  ⚠️ {manualTrackError}
+                </div>
+              )}
+
+              <p style={{ fontSize: "13px", color: "#94a3b8", margin: "14px 0 0" }}>
+                Ya neeche di gayi service provider list me se kisi bhi service par click karke direct <b>online token book</b> karein.
+              </p>
             </div>
           ) : (
             <div className={`live-ticket-card ${isServing ? "ticket-serving-now" : "ticket-waiting"}`}>

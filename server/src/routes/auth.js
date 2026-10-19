@@ -385,14 +385,14 @@ router.post("/customer/send-otp", async (req, res) => {
         if (!tokenNumber) {
             return res.status(400).json({
                 success: false,
-                message: "Please enter your Token Number (e.g. 104 or B-104).",
+                message: "Aap kisi service me enrolled nahi ho. Kripya apna Token Number enter karein (e.g. 104 ya B-104).",
             });
         }
 
         if (!phone) {
             return res.status(400).json({
                 success: false,
-                message: "Please enter the phone number provided during token generation.",
+                message: "Aap kisi service me enrolled nahi ho. Kripya token generation ke samay diya gaya mobile number enter karein.",
             });
         }
 
@@ -400,7 +400,7 @@ router.post("/customer/send-otp", async (req, res) => {
         if (isNaN(parsedTokenNum) || parsedTokenNum <= 0) {
             return res.status(400).json({
                 success: false,
-                message: "Invalid token number format. Please check your token receipt.",
+                message: "Aap kisi service me enrolled nahi ho. Token number format galat hai (e.g. 104 ya B-104 darj karein).",
             });
         }
 
@@ -408,7 +408,7 @@ router.post("/customer/send-otp", async (req, res) => {
         if (cleanDigits.length < 10) {
             return res.status(400).json({
                 success: false,
-                message: "Please enter a valid 10-digit mobile number.",
+                message: "Aap kisi service me enrolled nahi ho. Kripya 10-digit ka valid mobile number enter karein.",
             });
         }
         const last10 = cleanDigits.slice(-10);
@@ -444,7 +444,7 @@ router.post("/customer/send-otp", async (req, res) => {
         if (!queue) {
             return res.status(404).json({
                 success: false,
-                message: `No token record found for Token #${parsedTokenNum} with mobile ending in ...${last10.slice(-4)}. Please make sure your token number and mobile match the token generated at the counter.`,
+                message: `Aap kisi service me enrolled nahi ho. Token #${parsedTokenNum} aur mobile ending in ...${last10.slice(-4)} ka koi active token record nahi mila.`,
             });
         }
 

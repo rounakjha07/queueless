@@ -276,6 +276,121 @@ router.post("/book", protect, async (req, res) => {
   }
 });
 
+// 4.3 Public: Quick Track Token status by token number & optional phone
+router.get("/track-public", async (req, res) => {
+  try {
+    const { tokenNumber, phone } = req.query;
+
+    if (!tokenNumber) {
+      return res.status(400).json({
+        success: false,
+        message: "Aap kisi service me enrolled nahi ho. Kripya valid token number darj karein.",
+      });
+    }
+
+    const parsedTokenNum = parseInt(String(tokenNumber).replace(/\D/g, ""), 10);
+    if (isNaN(parsedTokenNum) || parsedTokenNum <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Aap kisi service me enrolled nahi ho. Token number format galat hai.",
+      });
+    }
+
+    const { startOfDay, endOfDay } = getTodayISTBoundaries();
+    const query = { tokenNumber: parsedTokenNum };
+
+    if (phone) {
+      const cleanDigits = String(phone).replace(/\D/g, "");
+      if (cleanDigits.length >= 4) {
+        query.customerPhone = { $regex: new RegExp(cleanDigits.slice(-10) + "$") };
+      }
+    }
+
+    // 1. Check today's active waiting/serving token
+    let token = await Queue.findOne({
+      ...query,
+      createdAt: { $gte: startOfDay, $lt: endOfDay },
+      status: { $in: ["waiting", "serving"] },
+    })
+      .populate("createdBy", "businessName name email address city phone")
+      .populate("servedBy", "name counterNumber")
+      .sort({ createdAt: -1 });
+
+    // 2. Check today's completed/cancelled token
+    if (!token) {
+      token = await Queue.findOne({
+        ...query,
+        createdAt: { $gte: startOfDay, $lt: endOfDay },
+      })
+        .populate("createdBy", "businessName name email address city phone")
+        .populate("servedBy", "name counterNumber")
+        .sort({ createdAt: -1 });
+    }
+
+    // 3. Fallback to recent token
+    if (!token) {
+      token = await Queue.findOne(query)
+        .populate("createdBy", "businessName name email address city phone")
+        .populate("servedBy", "name counterNumber")
+        .sort({ createdAt: -1 });
+    }
+
+    if (!token) {
+      return res.status(404).json({
+        success: false,
+        message: `Aap kisi service me enrolled nahi ho. Token #${parsedTokenNum} ka koi active record nahi mila.`,
+      });
+    }
+
+    // Count people ahead
+    const peopleAhead = await Queue.countDocuments({
+      createdBy: token.createdBy?._id,
+      serviceName: token.serviceName,
+      status: "waiting",
+      tokenNumber: { $lt: token.tokenNumber },
+      createdAt: { $gte: startOfDay, $lt: endOfDay },
+    });
+
+    const isServing = token.status === "serving";
+    const isCompleted = token.status === "completed";
+    const isCancelled = token.status === "cancelled";
+    const isWaiting = token.status === "waiting";
+
+    return res.json({
+      success: true,
+      hasActiveToken: isWaiting || isServing,
+      token: {
+        id: token._id,
+        tokenNumber: token.tokenNumber,
+        tokenCode: `#${token.serviceName.slice(0, 1).toUpperCase()}-${String(token.tokenNumber).padStart(3, "0")}`,
+        serviceName: token.serviceName,
+        status: token.status,
+        customerName: token.customerName,
+        customerPhone: token.customerPhone,
+        peopleAhead,
+        estimatedWaitMinutes: isServing ? 0 : Math.max(peopleAhead * 5, 2),
+        counterNumber: token.servedBy?.counterNumber || token.counterNumber || null,
+        staffName: token.servedBy?.name || null,
+        provider: {
+          id: token.createdBy?._id,
+          name: token.createdBy?.name || "Service Center",
+          businessName: token.createdBy?.businessName || "",
+          address: token.createdBy?.address || "",
+          city: token.createdBy?.city || "",
+          phone: token.createdBy?.phone || "",
+        },
+        createdAt: token.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error("Public track error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to track token right now.",
+    });
+  }
+});
+
 // 4.5 Customer: Get 100% Accurate Live Queue Status
 router.get("/customer-live-status", protect, async (req, res) => {
   try {
@@ -290,15 +405,59 @@ router.get("/customer-live-status", protect, async (req, res) => {
       queryConditions.push({ customerPhone: { $regex: new RegExp(last10 + "$") } });
     }
 
-    // 1. First priority: Today's active token (waiting or serving)
-    let token = await Queue.findOne({
-      $or: queryConditions,
-      createdAt: { $gte: startOfDay, $lt: endOfDay },
-      status: { $in: ["waiting", "serving"] },
-    })
-      .populate("createdBy", "businessName name email")
-      .populate("servedBy", "name counterNumber")
-      .sort({ createdAt: -1 });
+    let token = null;
+
+    // Check if user is searching for a specific manual token number
+    if (req.query.tokenNumber) {
+      const parsedNum = parseInt(String(req.query.tokenNumber).replace(/\D/g, ""), 10);
+      if (!isNaN(parsedNum) && parsedNum > 0) {
+        token = await Queue.findOne({
+          tokenNumber: parsedNum,
+          createdAt: { $gte: startOfDay, $lt: endOfDay },
+          status: { $in: ["waiting", "serving"] },
+        })
+          .populate("createdBy", "businessName name email address city phone")
+          .populate("servedBy", "name counterNumber")
+          .sort({ createdAt: -1 });
+
+        if (!token) {
+          token = await Queue.findOne({
+            tokenNumber: parsedNum,
+            createdAt: { $gte: startOfDay, $lt: endOfDay },
+          })
+            .populate("createdBy", "businessName name email address city phone")
+            .populate("servedBy", "name counterNumber")
+            .sort({ createdAt: -1 });
+        }
+
+        if (!token) {
+          token = await Queue.findOne({ tokenNumber: parsedNum })
+            .populate("createdBy", "businessName name email address city phone")
+            .populate("servedBy", "name counterNumber")
+            .sort({ createdAt: -1 });
+        }
+
+        if (!token) {
+          return res.json({
+            success: true,
+            hasActiveToken: false,
+            message: `Aap kisi service me enrolled nahi ho. Token #${parsedNum} ka koi active record nahi mila.`,
+          });
+        }
+      }
+    }
+
+    // Default: Find by customerId or phone
+    if (!token) {
+      token = await Queue.findOne({
+        $or: queryConditions,
+        createdAt: { $gte: startOfDay, $lt: endOfDay },
+        status: { $in: ["waiting", "serving"] },
+      })
+        .populate("createdBy", "businessName name email address city phone")
+        .populate("servedBy", "name counterNumber")
+        .sort({ createdAt: -1 });
+    }
 
     // 2. Second priority: Today's completed or cancelled token
     if (!token) {
@@ -306,7 +465,7 @@ router.get("/customer-live-status", protect, async (req, res) => {
         $or: queryConditions,
         createdAt: { $gte: startOfDay, $lt: endOfDay },
       })
-        .populate("createdBy", "businessName name email")
+        .populate("createdBy", "businessName name email address city phone")
         .populate("servedBy", "name counterNumber")
         .sort({ createdAt: -1 });
     }
@@ -316,7 +475,7 @@ router.get("/customer-live-status", protect, async (req, res) => {
       token = await Queue.findOne({
         $or: queryConditions,
       })
-        .populate("createdBy", "businessName name email")
+        .populate("createdBy", "businessName name email address city phone")
         .populate("servedBy", "name counterNumber")
         .sort({ createdAt: -1 });
     }
@@ -325,7 +484,7 @@ router.get("/customer-live-status", protect, async (req, res) => {
       return res.json({
         success: true,
         hasActiveToken: false,
-        message: "No token found for this account.",
+        message: "Aap kisi service me enrolled nahi ho.",
       });
     }
 

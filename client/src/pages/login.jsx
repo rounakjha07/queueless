@@ -359,7 +359,7 @@ function Login() {
                                             disabled={loading}
                                             style={{ marginTop: "16px" }}
                                         >
-                                            {loading ? "Checking Token Record..." : "Send Verification OTP 📲"}
+                                            {loading ? "Checking Token Record..." : "Track Token 🚀"}
                                         </button>
                                     </form>
                                 ) : (
