@@ -13,6 +13,21 @@ body {
   min-height: 100vh;
   font-family: "DM Sans", sans-serif;
   -webkit-font-smoothing: antialiased;
+  background: #080c14;
+  color: #f8fafc;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+body:has(.qd-light),
+body:has(.cust-light) {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+body:has(.qd-dark),
+body:has(.cust-dark) {
+  background: #080c14;
+  color: #f8fafc;
 }
 
 button,

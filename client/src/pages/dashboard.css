@@ -21,13 +21,17 @@
   --bg-panel: #131c2e;
   --bg-card: #18233a;
   --bg-hover: #1e2c47;
+  --bg-muted: #1e293b;
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
   --text-dim: #64748b;
   --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.15);
-  --glass-bg: rgba(19, 28, 46, 0.75);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --glass-bg: rgba(13, 20, 34, 0.88);
+  --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  --card-hover-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   --accent-purple: #6366f1;
+  --accent-purple-glow: rgba(99, 102, 241, 0.35);
   --accent-blue: #38bdf8;
   --accent-green: #10b981;
   --accent-amber: #f59e0b;
@@ -41,13 +45,17 @@
   --bg-panel: #ffffff;
   --bg-card: #ffffff;
   --bg-hover: #f1f5f9;
+  --bg-muted: #e2e8f0;
   --text-main: #0f172a;
   --text-muted: #475569;
-  --text-dim: #94a3b8;
+  --text-dim: #64748b;
   --border-subtle: #e2e8f0;
   --border-strong: #cbd5e1;
-  --glass-bg: rgba(255, 255, 255, 0.85);
-  --accent-purple: #6366f1;
+  --glass-bg: rgba(255, 255, 255, 0.92);
+  --card-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
+  --card-hover-shadow: 0 8px 25px rgba(15, 23, 42, 0.12);
+  --accent-purple: #4f46e5;
+  --accent-purple-glow: rgba(79, 70, 229, 0.25);
   --accent-blue: #0284c7;
   --accent-green: #059669;
   --accent-amber: #d97706;
@@ -461,7 +469,9 @@
   border: 1px solid var(--border-strong);
   border-radius: 16px;
   padding: 24px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--card-hover-shadow);
+  color: var(--text-main);
+  transition: background 0.25s ease, border-color 0.25s ease;
 }
 
 .modal-header {
@@ -475,6 +485,7 @@
   margin: 0;
   font-size: 18px;
   font-weight: 800;
+  color: var(--text-main);
 }
 
 .modal-close {
@@ -483,6 +494,15 @@
   font-size: 18px;
   color: var(--text-muted);
   cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
+}
+
+.modal-close:hover {
+  color: var(--text-main);
+  background: var(--bg-hover);
 }
 
 .modal-form-grid {
@@ -491,15 +511,34 @@
   gap: 12px;
 }
 
+.modal-form-grid label {
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 700;
+  display: block;
+  margin-bottom: 5px;
+}
+
 .modal-form-grid input,
 .modal-form-grid select {
   background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-strong);
   color: var(--text-main);
   padding: 11px 14px;
   border-radius: 10px;
   font-size: 13px;
   outline: none;
+  transition: border-color 0.2s, background 0.2s;
+  width: 100%;
+}
+
+.modal-form-grid input::placeholder {
+  color: var(--text-dim);
+}
+
+.modal-form-grid select option {
+  background: var(--bg-panel);
+  color: var(--text-main);
 }
 
 .modal-form-grid input:focus,
@@ -515,6 +554,59 @@
   padding: 11px 18px;
   border-radius: 10px;
   cursor: pointer;
+  transition: filter 0.2s, transform 0.15s;
+}
+
+.submit-token-btn:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.submit-token-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Staff Allotted Department Card */
+.qd-staff-allotted-card {
+  background: var(--bg-hover);
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.qd-staff-allotted-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-weight: 700;
+  display: block;
+}
+
+.qd-staff-allotted-value {
+  font-size: 14.5px;
+  color: var(--text-main);
+  font-weight: 800;
+}
+
+.qd-staff-allotted-badge {
+  font-size: 11.5px;
+  background: rgba(99, 102, 241, 0.18);
+  color: var(--accent-purple);
+  padding: 4px 9px;
+  border-radius: 6px;
+  font-weight: 700;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.qd-modern-app.qd-light .qd-staff-allotted-badge {
+  background: #dbeafe;
+  color: #1e40af;
+  border-color: #bfdbfe;
 }
 
 /* ================= KPI CARDS ================= */
@@ -1248,15 +1340,16 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: #080c14;
-  color: #f8fafc;
+  background: var(--bg-app);
+  color: var(--text-main);
+  transition: background 0.25s ease, color 0.25s ease;
 }
 
 .qd-loader-modern {
   width: 48px;
   height: 48px;
-  border: 4px solid #1e293b;
-  border-top-color: #6366f1;
+  border: 4px solid var(--border-strong);
+  border-top-color: var(--accent-purple);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   margin-bottom: 16px;

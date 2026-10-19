@@ -46,6 +46,11 @@ export default function CustomerPortal() {
   const [customerShowPassword, setCustomerShowPassword] = useState(false);
   const [customerLoginLoading, setCustomerLoginLoading] = useState(false);
   const [customerLoginError, setCustomerLoginError] = useState("");
+  const [theme, setTheme] = useState(() => localStorage.getItem("queueless-theme") || "light");
+
+  useEffect(() => {
+    localStorage.setItem("queueless-theme", theme);
+  }, [theme]);
 
   // Track chime playback to prevent repeat noise while token is serving
   const chimePlayedTokensRef = useRef(new Set());
@@ -325,9 +330,11 @@ export default function CustomerPortal() {
 
   if (authLoading) {
     return (
-      <div className="cust-loading-wrap">
-        <div className="cust-spinner" />
-        <p>Connecting to QueueLess Live Network...</p>
+      <div className={`cust-app ${theme === "dark" ? "cust-dark" : "cust-light"}`}>
+        <div className="cust-loading-wrap">
+          <div className="cust-spinner" />
+          <p>Connecting to QueueLess Live Network...</p>
+        </div>
       </div>
     );
   }
@@ -335,71 +342,52 @@ export default function CustomerPortal() {
   // ================= VIEW A: UNREGISTERED / NOT LOGGED IN CUSTOMER (OTP ACCESS) =================
   if (!user) {
     return (
-      <div className="cust-otp-wrapper">
-        <div className="cust-otp-card">
-          <div className="cust-otp-header">
-            <div className="cust-otp-icon">🎟️</div>
-            <h1 className="cust-otp-title">Customer Live Token Portal</h1>
-            <p className="cust-otp-subtitle">
-              Enter your <b>Token Number</b> & <b>Phone</b> for quick OTP access, or log in with your registered account.
-            </p>
-          </div>
+      <div className={`cust-app ${theme === "dark" ? "cust-dark" : "cust-light"}`}>
+        <div className="cust-otp-wrapper">
+          <div className="cust-otp-card">
+            {/* Top Bar with Dark/Light Mode Switcher */}
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "12px" }}>
+              <button
+                type="button"
+                className="cust-theme-toggle-btn"
+                onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+                title="Toggle Light / Dark mode"
+              >
+                {theme === "dark" ? "☀️ Light Mode" : "🌙 Dark Mode"}
+              </button>
+            </div>
 
-          {/* 2-Tab Switcher: Account Login vs Counter Slip OTP */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: "6px",
-              background: "#f1f5f9",
-              padding: "4px",
-              borderRadius: "10px",
-              marginBottom: "18px",
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => {
-                setCustomerAccessMode("login");
-                setOtpError("");
-              }}
-              style={{
-                padding: "8px 10px",
-                border: "none",
-                borderRadius: "8px",
-                fontWeight: 700,
-                fontSize: "12.5px",
-                cursor: "pointer",
-                background: customerAccessMode === "login" ? "#ffffff" : "transparent",
-                color: customerAccessMode === "login" ? "#1e293b" : "#64748b",
-                boxShadow: customerAccessMode === "login" ? "0 2px 5px rgba(0,0,0,0.06)" : "none",
-                transition: "all 0.2s ease",
-              }}
-            >
-              🔑 Account Login
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setCustomerAccessMode("otp");
-                setCustomerLoginError("");
-              }}
-              style={{
-                padding: "8px 10px",
-                border: "none",
-                borderRadius: "8px",
-                fontWeight: 700,
-                fontSize: "12.5px",
-                cursor: "pointer",
-                background: customerAccessMode === "otp" ? "#ffffff" : "transparent",
-                color: customerAccessMode === "otp" ? "#1e293b" : "#64748b",
-                boxShadow: customerAccessMode === "otp" ? "0 2px 5px rgba(0,0,0,0.06)" : "none",
-                transition: "all 0.2s ease",
-              }}
-            >
-              🎟️ Counter Token (OTP)
-            </button>
-          </div>
+            <div className="cust-otp-header">
+              <div className="cust-otp-icon">🎟️</div>
+              <h1 className="cust-otp-title">Customer Live Token Portal</h1>
+              <p className="cust-otp-subtitle">
+                Enter your <b>Token Number</b> & <b>Phone</b> for quick OTP access, or log in with your registered account.
+              </p>
+            </div>
+
+            {/* 2-Tab Switcher: Account Login vs Counter Slip OTP */}
+            <div className="cust-auth-tab-group">
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomerAccessMode("login");
+                  setOtpError("");
+                }}
+                className={`cust-auth-tab-btn ${customerAccessMode === "login" ? "is-active" : ""}`}
+              >
+                🔑 Account Login
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomerAccessMode("otp");
+                  setCustomerLoginError("");
+                }}
+                className={`cust-auth-tab-btn ${customerAccessMode === "otp" ? "is-active" : ""}`}
+              >
+                🎟️ Counter Token (OTP)
+              </button>
+            </div>
 
           {/* TAB 1: Registered Customer Email & Password Login */}
           {customerAccessMode === "login" && (
@@ -621,8 +609,9 @@ export default function CustomerPortal() {
           )}
         </div>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
   // ================= VIEW B: AUTHENTICATED CUSTOMER DASHBOARD =================
   const isServing = liveToken?.status === "serving";
@@ -644,7 +633,7 @@ export default function CustomerPortal() {
   });
 
   return (
-    <div className="cust-app">
+    <div className={`cust-app ${theme === "dark" ? "cust-dark" : "cust-light"}`}>
       {/* Navbar */}
       <header className="cust-navbar">
         <div className="cust-brand">
@@ -655,6 +644,14 @@ export default function CustomerPortal() {
         </div>
 
         <div className="cust-user-nav">
+          <button
+            type="button"
+            className="cust-theme-toggle-btn"
+            onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+            title="Toggle Light / Dark mode"
+          >
+            {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
+          </button>
           <div className="cust-user-badge">
             <div className="cust-avatar">
               {user.name?.slice(0, 2).toUpperCase() || "CU"}
@@ -686,13 +683,13 @@ export default function CustomerPortal() {
           {!liveToken ? (
             <div className="no-active-ticket-card">
               <div className="ticket-empty-icon">🎟️</div>
-              <h3 style={{ fontSize: "21px", color: "#1e293b", margin: "6px 0", fontWeight: "800" }}>
+              <h3 style={{ fontSize: "21px", color: "var(--cust-text-main)", margin: "6px 0", fontWeight: "800" }}>
                 Aap kisi service me enrolled nahi ho
               </h3>
-              <span style={{ fontSize: "13px", color: "#64748b", fontWeight: "700", display: "block", marginBottom: "8px" }}>
+              <span style={{ fontSize: "13px", color: "var(--cust-text-dim)", fontWeight: "700", display: "block", marginBottom: "8px" }}>
                 (No Active Token Generated)
               </span>
-              <p style={{ color: "#475569", fontSize: "14px", maxWidth: "520px", margin: "0 auto 18px", lineHeight: "1.5" }}>
+              <p style={{ color: "var(--cust-text-muted)", fontSize: "14px", maxWidth: "520px", margin: "0 auto 18px", lineHeight: "1.5" }}>
                 Aapka filhaal kisi bhi service provider ke paas koi active queue token generate nahi hua hai. Agar aapne physical counter se token slip li hai, to neeche apna Token Number daal kar live status track karein!
               </p>
 
@@ -703,29 +700,13 @@ export default function CustomerPortal() {
                   placeholder="e.g. 5 ya A-005"
                   value={manualTokenInput}
                   onChange={(e) => setManualTokenInput(e.target.value)}
-                  style={{
-                    flex: 1,
-                    padding: "10px 14px",
-                    borderRadius: "10px",
-                    border: "1px solid #cbd5e1",
-                    fontSize: "14px",
-                    outline: "none",
-                  }}
+                  className="cust-manual-track-input"
                 />
                 <button
                   type="submit"
                   disabled={manualTrackLoading}
-                  style={{
-                    padding: "10px 18px",
-                    borderRadius: "10px",
-                    border: "none",
-                    background: "#2563eb",
-                    color: "#ffffff",
-                    fontWeight: "700",
-                    fontSize: "13.5px",
-                    cursor: "pointer",
-                    whiteSpace: "nowrap",
-                  }}
+                  className="cust-submit-btn"
+                  style={{ padding: "10px 18px", fontSize: "13.5px", whiteSpace: "nowrap" }}
                 >
                   {manualTrackLoading ? "Searching..." : "Track Token 🔍"}
                 </button>

@@ -599,21 +599,25 @@ function Dashboard() {
 
     if (loading) {
         return (
-            <main className="qd-state">
-                <div className="qd-loader-modern" />
-                <p>Loading Modern Workspace...</p>
-            </main>
+            <div className={`qd-modern-app ${theme === "dark" ? "qd-dark" : "qd-light"}`} style={{ width: "100%" }}>
+                <main className="qd-state" style={{ width: "100%" }}>
+                    <div className="qd-loader-modern" />
+                    <p>Loading Modern Workspace...</p>
+                </main>
+            </div>
         );
     }
 
     if (error || !user) {
         return (
-            <main className="qd-state">
-                <div className="qd-state-card">
-                    <h2>{error || "Unable to load your account."}</h2>
-                    <button onClick={() => navigate("/login")}>Go to login</button>
-                </div>
-            </main>
+            <div className={`qd-modern-app ${theme === "dark" ? "qd-dark" : "qd-light"}`} style={{ width: "100%" }}>
+                <main className="qd-state" style={{ width: "100%" }}>
+                    <div className="qd-state-card">
+                        <h2>{error || "Unable to load your account."}</h2>
+                        <button onClick={() => navigate("/login")}>Go to login</button>
+                    </div>
+                </main>
+            </div>
         );
     }
 
@@ -674,7 +678,8 @@ function Dashboard() {
             return `${chartColors[service.index % chartColors.length]} ${start}% ${currentPercentage}%`;
         });
 
-    const donutGradient = totalServiceCustomers === 0 ? "conic-gradient(#334155 0% 100%)" : `conic-gradient(${donutSegments.join(", ")})`;
+    const donutEmptyColor = theme === "dark" ? "#1e293b" : "#e2e8f0";
+    const donutGradient = totalServiceCustomers === 0 ? `conic-gradient(${donutEmptyColor} 0% 100%)` : `conic-gradient(${donutSegments.join(", ")})`;
 
     const recentActivity = [...activeDataset].sort(
         (a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt)
@@ -878,24 +883,16 @@ function Dashboard() {
                                 />
 
                                 {isStaff && user?.assignedService ? (
-                                    <div style={{
-                                        background: "var(--bg-muted, #f8fafc)",
-                                        padding: "10px 14px",
-                                        borderRadius: "10px",
-                                        border: "1px solid var(--border-color, #cbd5e1)",
-                                        display: "flex",
-                                        justifyContent: "space-between",
-                                        alignItems: "center",
-                                    }}>
+                                    <div className="qd-staff-allotted-card">
                                         <div>
-                                            <span style={{ fontSize: "11px", color: "var(--text-muted, #64748b)", textTransform: "uppercase", fontWeight: "700", display: "block" }}>
+                                            <span className="qd-staff-allotted-label">
                                                 Your Allotted Department
                                             </span>
-                                            <strong style={{ fontSize: "14.5px", color: "var(--text-color, #1e293b)" }}>
+                                            <strong className="qd-staff-allotted-value">
                                                 🏢 {user.assignedService}
                                             </strong>
                                         </div>
-                                        <span style={{ fontSize: "11.5px", background: "#dbeafe", color: "#1e40af", padding: "4px 8px", borderRadius: "6px", fontWeight: "700" }}>
+                                        <span className="qd-staff-allotted-badge">
                                             Auto-Assigned
                                         </span>
                                     </div>
