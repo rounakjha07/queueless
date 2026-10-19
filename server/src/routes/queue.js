@@ -540,4 +540,71 @@ router.patch("/:id/status", protect, async (req, res) => {
   }
 });
 
+// 9. Manager: Seed sample demo data (for instant visualization of charts & stats)
+router.post("/seed-demo", protect, async (req, res) => {
+  try {
+    if (req.user.role !== "manager") {
+      return res.status(403).json({ success: false, message: "Only managers can seed demo data." });
+    }
+
+    const managerId = req.user.id;
+
+    // 1. Ensure sample services exist
+    const defaultServices = [
+      "General Consultation",
+      "Document Verification",
+      "Express Payments",
+    ];
+
+    for (const name of defaultServices) {
+      const exists = await Service.findOne({ createdBy: managerId, name });
+      if (!exists) {
+        await Service.create({ name, createdBy: managerId });
+      }
+    }
+
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    // 2. Sample records for today
+    const sampleToday = [
+      { serviceName: "General Consultation", customerName: "Priya Verma", customerPhone: "+91 98765 11001", status: "completed", estimatedWaitMinutes: 5, tokenNumber: 1 },
+      { serviceName: "General Consultation", customerName: "Anil Kapoor", customerPhone: "+91 98765 11002", status: "serving", estimatedWaitMinutes: 10, tokenNumber: 2, counterNumber: "Counter 1" },
+      { serviceName: "General Consultation", customerName: "Vikram Singh", customerPhone: "+91 98765 11003", status: "waiting", estimatedWaitMinutes: 15, tokenNumber: 3 },
+      { serviceName: "Document Verification", customerName: "Neha Sharma", customerPhone: "+91 98765 11004", status: "waiting", estimatedWaitMinutes: 8, tokenNumber: 1 },
+      { serviceName: "Document Verification", customerName: "Rajesh Patel", customerPhone: "+91 98765 11005", status: "waiting", estimatedWaitMinutes: 14, tokenNumber: 2 },
+      { serviceName: "Express Payments", customerName: "Sunita Rao", customerPhone: "+91 98765 11006", status: "completed", estimatedWaitMinutes: 4, tokenNumber: 1 },
+    ];
+
+    // 3. Sample records for yesterday (so All-Time Total differs from Today)
+    const samplePast = [
+      { serviceName: "General Consultation", customerName: "Manish Tiwari", customerPhone: "+91 98765 22001", status: "completed", estimatedWaitMinutes: 6, tokenNumber: 101, createdAt: yesterday, updatedAt: yesterday },
+      { serviceName: "Document Verification", customerName: "Sneha Roy", customerPhone: "+91 98765 22002", status: "completed", estimatedWaitMinutes: 12, tokenNumber: 102, createdAt: yesterday, updatedAt: yesterday },
+      { serviceName: "Express Payments", customerName: "Deepak Joshi", customerPhone: "+91 98765 22003", status: "completed", estimatedWaitMinutes: 5, tokenNumber: 103, createdAt: yesterday, updatedAt: yesterday },
+      { serviceName: "General Consultation", customerName: "Karan Malhotra", customerPhone: "+91 98765 22004", status: "cancelled", estimatedWaitMinutes: 0, tokenNumber: 104, createdAt: yesterday, updatedAt: yesterday },
+    ];
+
+    for (const item of sampleToday) {
+      await Queue.create({
+        ...item,
+        createdBy: managerId,
+      });
+    }
+
+    for (const item of samplePast) {
+      await Queue.create({
+        ...item,
+        createdBy: managerId,
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Sample demo dataset loaded successfully with services, queues, and analytics!",
+    });
+  } catch (error) {
+    console.error("Seed demo error:", error);
+    return res.status(500).json({ success: false, message: "Failed to load demo data." });
+  }
+});
+
 export default router;

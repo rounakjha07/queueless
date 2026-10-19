@@ -1,141 +1,60 @@
-
 import "./queueActivityChart.css";
 
 export default function QueueActivityChart({ data = [] }) {
   const maxCount = Math.max(...data.map((item) => item.count), 1);
 
-  const colors = [
-    "#8b5cf6",
-    "#38bdf8",
-    "#fbbf24",
-    "#10b981",
-    "#f43f5e",
-    "#a78bfa",
-    "#14b8a6",
-    "#fb7185",
-    "#eab308",
-    "#6366f1",
+  const gradientPairs = [
+    { from: "#6366f1", to: "#818cf8", glow: "rgba(99, 102, 241, 0.4)" }, // Indigo
+    { from: "#0284c7", to: "#38bdf8", glow: "rgba(56, 189, 248, 0.4)" }, // Sky
+    { from: "#059669", to: "#34d399", glow: "rgba(16, 185, 129, 0.4)" }, // Emerald
+    { from: "#d97706", to: "#fbbf24", glow: "rgba(245, 158, 11, 0.4)" }, // Amber
+    { from: "#db2777", to: "#f472b6", glow: "rgba(236, 72, 153, 0.4)" }, // Pink
+    { from: "#7c3aed", to: "#a78bfa", glow: "rgba(124, 58, 237, 0.4)" }, // Violet
+    { from: "#0891b2", to: "#22d3ee", glow: "rgba(6, 182, 212, 0.4)" }, // Cyan
+    { from: "#e11d48", to: "#fb7185", glow: "rgba(244, 63, 94, 0.4)" }, // Rose
   ];
 
   if (data.length === 0 || data.every((item) => item.count === 0)) {
     return (
-      <div className="qa-empty">
-        No queue activity to display yet.
+      <div className="qa-modern-empty">
+        <span className="qa-empty-glyph">📊</span>
+        <h4>No Queue Activity Yet</h4>
+        <p>Activity will dynamically populate as customers get assigned tokens.</p>
       </div>
     );
   }
 
-  const scrollable = data.length > 5;
+  const scrollable = data.length > 6;
 
   return (
-    <div
-      className="qa-chart-scroll"
-      style={{
-        width: "100%",
-        minWidth: 0,
-        overflowX: "auto",
-        overflowY: "hidden",
-        marginTop: "12px",
-        boxSizing: "border-box",
-      }}
-    >
-      <div
-        style={{
-          display: "grid",
-          gridAutoFlow: "column",
-          gridTemplateRows: "1fr",
-          gridAutoColumns: scrollable
-            ? "120px"
-            : `calc((100% - ${(data.length - 1) * 12}px) / ${data.length})`,
-          gap: "12px",
-          width: scrollable ? "max-content" : "100%",
-          height: "190px",
-          padding: "4px 4px 0",
-          boxSizing: "border-box",
-        }}
-      >
+    <div className="qa-chart-container">
+      <div className={`qa-bars-track ${scrollable ? "is-scrollable" : ""}`}>
         {data.map((item, index) => {
-          const barHeight = Math.max(
-            (item.count / maxCount) * 140,
-            8
-          );
+          const barHeight = Math.max((item.count / maxCount) * 140, 10);
+          const colors = gradientPairs[index % gradientPairs.length];
 
           return (
-            <div
-              key={item.name}
-              style={{
-                display: "grid",
-                gridTemplateRows: "minmax(0, 1fr) 30px",
-                minWidth: 0,
-                height: "100%",
-                textAlign: "center",
-              }}
-            >
-              {/* Bar area */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-end",
-                  justifyContent: "center",
-                  minHeight: 0,
-                  borderBottom:
-                    "1px solid var(--border-color, #2b3952)",
-                  boxSizing: "border-box",
-                  overflow: "visible",
-                }}
-              >
-                {/* Bar + number */}
+            <div key={item.name} className="qa-bar-col">
+              {/* Bar track and fill */}
+              <div className="qa-bar-slot">
                 <div
+                  className="qa-bar-capsule"
                   style={{
-                    position: "relative",
                     height: `${barHeight}px`,
-                    width: "min(100%, 38px)",
-                    flexShrink: 0,
+                    background: `linear-gradient(180deg, ${colors.to}, ${colors.from})`,
+                    boxShadow: `0 4px 14px ${colors.glow}`,
                   }}
+                  title={`${item.name}: ${item.count} customers`}
                 >
-                  {/* Number directly above bar */}
-                  <span
-                    style={{
-                      position: "absolute",
-                      bottom: "calc(100% + 5px)",
-                      left: "50%",
-                      transform: "translateX(-50%)",
-                      fontSize: "12px",
-                      fontWeight: 700,
-                      lineHeight: 1,
-                      whiteSpace: "nowrap",
-                      color: "var(--text-heading, #f1f5ff)",
-                    }}
-                  >
-                    {item.count}
-                  </span>
-
-                  {/* Colored bar */}
-                  <div
-                    title={`${item.name}: ${item.count}`}
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      backgroundColor: colors[index % colors.length],
-                      borderRadius: "8px 8px 2px 2px",
-                    }}
-                  />
+                  <span className="qa-floating-count">{item.count}</span>
                 </div>
               </div>
 
-              {/* Service name */}
-              <span
-                title={item.name}
-                style={{
-                  fontSize: "10px",
-                  lineHeight: 1.3,
-                  overflowWrap: "anywhere",
-                  color: "var(--text-muted, #9aa9c2)",
-                  paddingTop: "5px",
-                }}
-              >
-                {item.name}
-              </span>
+              {/* Label */}
+              <div className="qa-bar-label-wrap" title={item.name}>
+                <span className="qa-bar-label">{item.name}</span>
+                <span className="qa-bar-subcount">{item.count} visits</span>
+              </div>
             </div>
           );
         })}

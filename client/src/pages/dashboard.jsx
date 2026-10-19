@@ -9,7 +9,8 @@ function Dashboard() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [activeNav, setActiveNav] = useState("Overview");
-    const [theme, setTheme] = useState(() => localStorage.getItem("queueless-theme") || "light");
+    const [timeRange, setTimeRange] = useState("today"); // "today" | "all"
+    const [theme, setTheme] = useState(() => localStorage.getItem("queueless-theme") || "dark");
     const navigate = useNavigate();
 
     // Queues and Stats
@@ -32,7 +33,6 @@ function Dashboard() {
     });
 
     const [queueLoading, setQueueLoading] = useState(true);
-    const [queueError, setQueueError] = useState("");
     const [queueStatusFilter, setQueueStatusFilter] = useState("all");
 
     // Add customer walk-in modal
@@ -48,7 +48,7 @@ function Dashboard() {
     const [serviceLoading, setServiceLoading] = useState(false);
     const [serviceMessage, setServiceMessage] = useState("");
 
-    // Customers search & pagination
+    // Customers search
     const [customerSearch, setCustomerSearch] = useState("");
 
     // Staff Management state
@@ -62,6 +62,7 @@ function Dashboard() {
     const [staffMessage, setStaffMessage] = useState("");
     const [lastGeneratedCode, setLastGeneratedCode] = useState("");
     const [callingNextLoading, setCallingNextLoading] = useState(false);
+    const [seedingLoading, setSeedingLoading] = useState(false);
 
     useEffect(() => {
         localStorage.setItem("queueless-theme", theme);
@@ -69,17 +70,15 @@ function Dashboard() {
 
     async function fetchQueue() {
         try {
-            setQueueError("");
             const response = await fetch("http://localhost:5000/api/queue", {
                 credentials: "include",
             });
             const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data.message || "Failed to load queue");
+            if (response.ok) {
+                setQueueData(data.queues || []);
             }
-            setQueueData(data.queues || []);
         } catch (err) {
-            setQueueError(err.message || "Unable to load queue");
+            console.error("Queue fetch error:", err);
         } finally {
             setQueueLoading(false);
         }
@@ -96,7 +95,7 @@ function Dashboard() {
                 if (data.allTimeStats) setAllTimeStats(data.allTimeStats);
             }
         } catch (err) {
-            console.error("Stats error:", err.message);
+            console.error("Stats error:", err);
         }
     }
 
@@ -113,7 +112,7 @@ function Dashboard() {
                 setInviteServiceName((current) => serviceNames.includes(current) ? current : (serviceNames[0] || ""));
             }
         } catch (err) {
-            console.error("Fetch services error:", err.message);
+            console.error("Fetch services error:", err);
         }
     }
 
@@ -179,6 +178,30 @@ function Dashboard() {
         return () => clearInterval(interval);
     }, [user]);
 
+    // Seed Demo Sample Data
+    async function handleSeedDemoData() {
+        setSeedingLoading(true);
+        try {
+            const res = await fetch("http://localhost:5000/api/queue/seed-demo", {
+                method: "POST",
+                credentials: "include",
+            });
+            const data = await res.json();
+            if (res.ok) {
+                await fetchQueue();
+                await fetchStats();
+                await fetchServices();
+                await fetchStaff();
+            } else {
+                alert(data.message || "Failed to load demo data.");
+            }
+        } catch (err) {
+            console.error("Seed error:", err);
+        } finally {
+            setSeedingLoading(false);
+        }
+    }
+
     // Add Service
     async function handleAddService(event) {
         event.preventDefault();
@@ -234,7 +257,6 @@ function Dashboard() {
         event.preventDefault();
         if (!customerName.trim() || !serviceName.trim()) return;
         setAddingCustomer(true);
-        setQueueError("");
         try {
             const response = await fetch("http://localhost:5000/api/queue", {
                 method: "POST",
@@ -254,7 +276,7 @@ function Dashboard() {
             await fetchQueue();
             await fetchStats();
         } catch (err) {
-            setQueueError(err.message || "Unable to add customer");
+            alert(err.message || "Unable to add customer");
         } finally {
             setAddingCustomer(false);
         }
@@ -274,7 +296,7 @@ function Dashboard() {
             await fetchQueue();
             await fetchStats();
         } catch (err) {
-            setQueueError(err.message || "Unable to update status");
+            alert(err.message || "Unable to update status");
         }
     }
 
@@ -301,7 +323,7 @@ function Dashboard() {
             playChime();
             await fetchQueue();
             await fetchStats();
-        } catch (err) {
+        } catch {
             alert("Failed to call next customer.");
         } finally {
             setCallingNextLoading(false);
@@ -386,8 +408,8 @@ function Dashboard() {
     if (loading) {
         return (
             <main className="qd-state">
-                <div className="qd-loader" />
-                <p>Preparing Service Provider Workspace...</p>
+                <div className="qd-loader-modern" />
+                <p>Loading Modern Workspace...</p>
             </main>
         );
     }
@@ -419,26 +441,31 @@ function Dashboard() {
         return istDateFormatter.format(new Date(item.createdAt)) === todayIST;
     });
 
-    const filteredCustomers = queueData.filter((item) => {
+    // Active dataset based on TimeRange (Today vs All-Time Total)
+    const activeDataset = timeRange === "today" ? todayQueueData : queueData;
+    const activeStats = timeRange === "today" ? stats : allTimeStats;
+
+    const filteredCustomers = activeDataset.filter((item) => {
         const matchesSearch = item.customerName?.toLowerCase().includes(customerSearch.trim().toLowerCase()) ||
             item.serviceName?.toLowerCase().includes(customerSearch.trim().toLowerCase());
         const matchesStatus = queueStatusFilter === "all" || item.status === queueStatusFilter;
         return matchesSearch && matchesStatus;
     });
 
-    const serviceNamesForToday = [
+    // Service Breakdown for active time range
+    const activeServiceNames = [
         ...services,
-        ...new Set(todayQueueData.map((item) => item.serviceName).filter((name) => name && !services.includes(name))),
+        ...new Set(activeDataset.map((item) => item.serviceName).filter((name) => name && !services.includes(name))),
     ];
 
-    const serviceBreakdown = serviceNamesForToday.map((service) => ({
+    const serviceBreakdown = activeServiceNames.map((service) => ({
         name: service,
-        count: todayQueueData.filter((item) => item.serviceName === service).length,
+        count: activeDataset.filter((item) => item.serviceName === service).length,
     }));
 
     const chartColors = [
-        "#786cf6", "#5fa9f2", "#f3b65e", "#10b981", "#f43f5e",
-        "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#8b5cf6",
+        "#6366f1", "#38bdf8", "#10b981", "#f59e0b", "#ec4899",
+        "#8b5cf6", "#06b6d4", "#84cc16", "#f97316", "#14b8a6",
     ];
 
     const totalServiceCustomers = serviceBreakdown.reduce((total, srv) => total + srv.count, 0);
@@ -453,125 +480,170 @@ function Dashboard() {
             return `${chartColors[service.index % chartColors.length]} ${start}% ${currentPercentage}%`;
         });
 
-    const donutGradient = totalServiceCustomers === 0 ? "#e9edf4" : `conic-gradient(${donutSegments.join(", ")})`;
+    const donutGradient = totalServiceCustomers === 0 ? "conic-gradient(#334155 0% 100%)" : `conic-gradient(${donutSegments.join(", ")})`;
 
-    const recentActivity = [...todayQueueData].sort(
+    const recentActivity = [...activeDataset].sort(
         (a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt)
-    ).slice(0, 5);
+    ).slice(0, 6);
 
     const initials = displayName.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
 
     const navItems = [
-        { label: "Overview", icon: "◫" },
-        { label: "Live Queue", icon: "≋" },
+        { label: "Overview", icon: "📊" },
+        { label: "Live Queue", icon: "⚡" },
         { label: "Staff & Counters", icon: "🧑‍💼" },
-        { label: "Customers", icon: "♙" },
-        { label: "Services", icon: "▦" },
+        { label: "Customers", icon: "👥" },
+        { label: "Services", icon: "🏢" },
     ];
 
+    const isWorkspaceEmpty = queueData.length === 0 && services.length === 0;
+
     return (
-        <div className={`qd-app ${theme === "dark" ? "qd-dark" : ""}`}>
+        <div className={`qd-modern-app ${theme === "dark" ? "qd-dark" : "qd-light"}`}>
             {/* Sidebar */}
-            <aside className="qd-sidebar">
-                <button className="qd-brand" onClick={() => setActiveNav("Overview")}>
-                    <span className="qd-brand-mark">Q</span>
-                    <span>Queue<span className="qd-brand-light">Less</span></span>
-                </button>
-
-                <div className="qd-workspace-label">WORKSPACE</div>
-
-                <nav className="qd-nav">
-                    {navItems.map((item) => (
-                        <button
-                            key={item.label}
-                            className={`qd-nav-item ${activeNav === item.label ? "active" : ""}`}
-                            onClick={() => setActiveNav(item.label)}
-                        >
-                            <span className="qd-nav-icon">{item.icon}</span>
-                            <span>{item.label}</span>
-                            {item.label === "Live Queue" && stats.waiting > 0 && <span className="qd-live-dot" />}
-                        </button>
-                    ))}
-                </nav>
-
-                <div className="qd-sidebar-bottom">
-                    <button className="qd-nav-item" onClick={handleLogout}>
-                        <span className="qd-nav-icon">🚪</span>
-                        Log out
+            <aside className="qd-sidebar-modern">
+                <div className="qd-sidebar-top">
+                    <button className="qd-brand-modern" onClick={() => setActiveNav("Overview")}>
+                        <div className="qd-brand-glow-icon">Q</div>
+                        <div className="qd-brand-names">
+                            <span className="qd-brand-main">QueueLess</span>
+                            <span className="qd-brand-badge">SaaS Hub</span>
+                        </div>
                     </button>
 
-                    <div className="qd-sidebar-user">
-                        <div className="qd-avatar">{initials}</div>
-                        <div className="qd-user-info">
+                    <div className="qd-nav-divider-label">NAVIGATION</div>
+
+                    <nav className="qd-nav-modern">
+                        {navItems.map((item) => (
+                            <button
+                                key={item.label}
+                                className={`qd-nav-btn ${activeNav === item.label ? "is-active" : ""}`}
+                                onClick={() => setActiveNav(item.label)}
+                            >
+                                <span className="qd-nav-emoji">{item.icon}</span>
+                                <span className="qd-nav-label-text">{item.label}</span>
+                                {item.label === "Live Queue" && stats.waiting > 0 && (
+                                    <span className="qd-pulsing-badge">{stats.waiting}</span>
+                                )}
+                            </button>
+                        ))}
+                    </nav>
+                </div>
+
+                <div className="qd-sidebar-bottom-modern">
+                    <div className="qd-user-profile-widget">
+                        <div className="qd-user-avatar-modern">{initials}</div>
+                        <div className="qd-user-details-modern">
                             <strong>{displayName}</strong>
-                            <small>Service Provider Head</small>
+                            <span>Service Provider Head</span>
                         </div>
                     </div>
+
+                    <button className="qd-signout-btn" onClick={handleLogout}>
+                        <span>🚪</span> Log out
+                    </button>
                 </div>
             </aside>
 
-            {/* Main Area */}
-            <main className="qd-main">
-                <header className="qd-topbar">
-                    <div>
-                        <div className="qd-breadcrumb">Workspace <span>/</span> {activeNav}</div>
-                        <div className="qd-page-title">{activeNav}</div>
+            {/* Main Canvas */}
+            <main className="qd-main-canvas">
+                {/* Modern Top Header Bar */}
+                <header className="qd-top-header">
+                    <div className="qd-header-left">
+                        <div className="qd-crumb-trail">
+                            <span>Workspace</span>
+                            <span className="crumb-arrow">/</span>
+                            <span className="crumb-current">{activeNav}</span>
+                        </div>
+                        <h1 className="qd-header-title">{activeNav}</h1>
                     </div>
 
-                    <div className="qd-topbar-actions">
-                        <div className="qd-status-pill"><span /> System Active</div>
+                    {/* Right side Header Controls */}
+                    <div className="qd-header-right">
+                        {/* Today vs All-Time Total Range Switcher */}
+                        <div className="qd-range-segmented" title="Switch between Today and All-Time cumulative metrics">
+                            <button
+                                className={`segmented-btn ${timeRange === "today" ? "selected" : ""}`}
+                                onClick={() => setTimeRange("today")}
+                            >
+                                📅 Today
+                            </button>
+                            <button
+                                className={`segmented-btn ${timeRange === "all" ? "selected" : ""}`}
+                                onClick={() => setTimeRange("all")}
+                            >
+                                🌐 All-Time Total
+                            </button>
+                        </div>
+
+                        {/* Theme Toggle */}
                         <button
-                            className="qd-icon-button qd-theme-toggle"
-                            onClick={() => setTheme((current) => current === "light" ? "dark" : "light")}
-                            title="Toggle theme"
+                            className="qd-glass-icon-btn"
+                            onClick={() => setTheme((c) => (c === "light" ? "dark" : "light"))}
+                            title="Toggle Light / Dark mode"
                         >
-                            {theme === "dark" ? "☀" : "☾"}
+                            {theme === "dark" ? "☀️" : "🌙"}
                         </button>
-                        <div className="qd-top-avatar">{initials}</div>
+
+                        {/* Fast Call Next Customer */}
+                        <button
+                            className="qd-cta-primary-btn"
+                            onClick={() => handleCallNext()}
+                            disabled={callingNextLoading || stats.waiting === 0}
+                            title="Call next waiting customer"
+                        >
+                            ⚡ Call Next
+                        </button>
+
+                        {/* Add Token */}
+                        <button
+                            className="qd-cta-glass-btn"
+                            onClick={() => setShowAddCustomer(true)}
+                        >
+                            + Issue Token
+                        </button>
                     </div>
                 </header>
 
-                <div className="qd-content">
-                    {/* Welcome Banner */}
-                    <section className="qd-welcome-row">
-                        <div>
-                            <p className="qd-eyebrow">SERVICE PROVIDER HEAD PORTAL</p>
-                            <h1>{displayName} <span>✦</span></h1>
-                            <p className="qd-subtitle">Oversee counters, staff members, and live customer flow.</p>
-                        </div>
-                        <div style={{ display: "flex", gap: "10px" }}>
+                <div className="qd-body-content">
+                    {/* Zero State / Demo Seeder Banner */}
+                    {isWorkspaceEmpty && (
+                        <div className="qd-demo-banner">
+                            <div className="demo-banner-content">
+                                <span className="demo-sparkle">✨</span>
+                                <div>
+                                    <h4>Empty Workspace? Preview QueueLess with Sample Data</h4>
+                                    <p>Click below to generate realistic demo services, queues, and past transactions to see charts and total analytics.</p>
+                                </div>
+                            </div>
                             <button
-                                className="qd-outline-button"
-                                style={{ background: "#786cf6", color: "white", borderColor: "#786cf6" }}
-                                onClick={() => handleCallNext()}
-                                disabled={callingNextLoading || stats.waiting === 0}
+                                className="demo-load-btn"
+                                onClick={handleSeedDemoData}
+                                disabled={seedingLoading}
                             >
-                                ⚡ Call Next Customer
-                            </button>
-                            <button
-                                className="qd-outline-button"
-                                onClick={() => setShowAddCustomer(true)}
-                            >
-                                + Generate Token
+                                {seedingLoading ? "Loading..." : "Load Demo Dataset 🚀"}
                             </button>
                         </div>
-                    </section>
+                    )}
 
-                    {/* Add Customer Walk-in Modal */}
+                    {/* Add Walk-in Modal Form */}
                     {showAddCustomer && (
-                        <div className="qd-add-customer-form" style={{ marginBottom: "24px" }}>
-                            <h3>Generate Token for Walk-in Customer</h3>
-                            <form onSubmit={handleAddCustomer} style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                        <div className="qd-modal-card">
+                            <div className="modal-header">
+                                <h3>Generate Token for Walk-in Customer</h3>
+                                <button className="modal-close" onClick={() => setShowAddCustomer(false)}>✕</button>
+                            </div>
+                            <form onSubmit={handleAddCustomer} className="modal-form-grid">
                                 <input
                                     type="text"
-                                    placeholder="Customer name"
+                                    placeholder="Customer Full Name"
                                     value={customerName}
                                     onChange={(e) => setCustomerName(e.target.value)}
                                     required
                                 />
                                 <input
                                     type="tel"
-                                    placeholder="Phone (optional)"
+                                    placeholder="Phone Number (optional)"
                                     value={customerPhone}
                                     onChange={(e) => setCustomerPhone(e.target.value)}
                                 />
@@ -581,16 +653,13 @@ function Dashboard() {
                                     required
                                     disabled={services.length === 0}
                                 >
-                                    <option value="" disabled>Select service</option>
+                                    <option value="" disabled>Select Department / Service</option>
                                     {services.map((srv) => (
                                         <option key={srv} value={srv}>{srv}</option>
                                     ))}
                                 </select>
-                                <button type="submit" disabled={addingCustomer || services.length === 0}>
-                                    {addingCustomer ? "Generating..." : "Issue Token"}
-                                </button>
-                                <button type="button" onClick={() => setShowAddCustomer(false)}>
-                                    Cancel
+                                <button type="submit" className="submit-token-btn" disabled={addingCustomer || services.length === 0}>
+                                    {addingCustomer ? "Issuing..." : "Generate Token Now →"}
                                 </button>
                             </form>
                         </div>
@@ -599,82 +668,97 @@ function Dashboard() {
                     {/* ================= VIEW 1: OVERVIEW ================= */}
                     {activeNav === "Overview" && (
                         <>
-                            {/* KPI Cards */}
-                            <section className="qd-stats-grid">
-                                <article className="qd-stat-card">
-                                    <div className="qd-stat-top">
-                                        <span>Customers Today</span>
-                                        <span className="qd-stat-icon purple">♙</span>
+                            {/* KPI Metrics Row */}
+                            <section className="qd-kpi-modern-grid">
+                                <article className="qd-kpi-card purple-glow">
+                                    <div className="kpi-card-header">
+                                        <span className="kpi-title">{timeRange === "today" ? "Customers Today" : "Total Customers (All-Time)"}</span>
+                                        <span className="kpi-icon-pill">👥</span>
                                     </div>
-                                    <div className="qd-stat-number">{stats.totalCustomers}</div>
-                                    <div className="qd-stat-foot"><span>Tokens issued today</span></div>
+                                    <div className="kpi-number-display">{activeStats.totalCustomers}</div>
+                                    <div className="kpi-subtext">
+                                        <span>{timeRange === "today" ? "Issued today across counters" : "Cumulative total since launch"}</span>
+                                    </div>
                                 </article>
 
-                                <article className="qd-stat-card">
-                                    <div className="qd-stat-top">
-                                        <span>Currently Waiting</span>
-                                        <span className="qd-stat-icon orange">◷</span>
+                                <article className="qd-kpi-card amber-glow">
+                                    <div className="kpi-card-header">
+                                        <span className="kpi-title">{timeRange === "today" ? "Waiting in Queue" : "Total Waiting"}</span>
+                                        <span className="kpi-icon-pill">⏳</span>
                                     </div>
-                                    <div className="qd-stat-number">{stats.waiting}</div>
-                                    <div className="qd-stat-foot"><span>Awaiting their turn</span></div>
+                                    <div className="kpi-number-display">{activeStats.waiting}</div>
+                                    <div className="kpi-subtext">
+                                        <span>Currently in line awaiting turn</span>
+                                    </div>
                                 </article>
 
-                                <article className="qd-stat-card">
-                                    <div className="qd-stat-top">
-                                        <span>Average Wait</span>
-                                        <span className="qd-stat-icon blue">◴</span>
+                                <article className="qd-kpi-card green-glow">
+                                    <div className="kpi-card-header">
+                                        <span className="kpi-title">{timeRange === "today" ? "Completed Today" : "Total Completed"}</span>
+                                        <span className="kpi-icon-pill">✓</span>
                                     </div>
-                                    <div className="qd-stat-number">{stats.averageWaitTime} <small>min</small></div>
-                                    <div className="qd-stat-foot"><span>Estimated active wait</span></div>
+                                    <div className="kpi-number-display">{activeStats.completed}</div>
+                                    <div className="kpi-subtext">
+                                        <span>Successfully served customers</span>
+                                    </div>
                                 </article>
 
-                                <article className="qd-stat-card">
-                                    <div className="qd-stat-top">
-                                        <span>Active Staff</span>
-                                        <span className="qd-stat-icon green">🧑‍💼</span>
+                                <article className="qd-kpi-card blue-glow">
+                                    <div className="kpi-card-header">
+                                        <span className="kpi-title">Average Wait Time</span>
+                                        <span className="kpi-icon-pill">⚡</span>
                                     </div>
-                                    <div className="qd-stat-number">{staffList.length}</div>
-                                    <div className="qd-stat-foot"><span>Counters operational</span></div>
+                                    <div className="kpi-number-display">{activeStats.averageWaitTime} <small>min</small></div>
+                                    <div className="kpi-subtext">
+                                        <span>Active wait calculation</span>
+                                    </div>
                                 </article>
                             </section>
 
-                            {/* Charts */}
-                            <section className="qd-analytics-grid">
-                                <article className="qd-panel qd-chart-panel">
-                                    <div className="qd-panel-heading">
+                            {/* Analytics Visual Grid */}
+                            <section className="qd-analytics-modern-grid">
+                                {/* Bar Chart Panel */}
+                                <article className="qd-modern-panel">
+                                    <div className="panel-title-bar">
                                         <div>
-                                            <h2>Queue Activity by Service</h2>
-                                            <p>Traffic distribution across counters</p>
+                                            <h3>{timeRange === "today" ? "Today's Queue Activity" : "All-Time Queue Activity by Service"}</h3>
+                                            <p>Volume distribution across departments</p>
                                         </div>
+                                        <span className="panel-badge-indicator">
+                                            {timeRange === "today" ? "LIVE TODAY" : "ALL-TIME CUMULATIVE"}
+                                        </span>
                                     </div>
                                     <QueueActivityChart data={serviceBreakdown} />
                                 </article>
 
-                                <article className="qd-panel qd-service-panel">
-                                    <div className="qd-panel-heading">
+                                {/* Donut Performance Panel */}
+                                <article className="qd-modern-panel">
+                                    <div className="panel-title-bar">
                                         <div>
-                                            <h2>Service Breakdown</h2>
-                                            <p>Volume per service category</p>
+                                            <h3>{timeRange === "today" ? "Service Breakdown (Today)" : "Service Breakdown (Total)"}</h3>
+                                            <p>Traffic ratio per counter</p>
                                         </div>
                                     </div>
 
-                                    <div className="qd-donut-wrap">
-                                        <div className="qd-donut" style={{ background: donutGradient }}>
-                                            <div>
+                                    <div className="donut-center-wrap">
+                                        <div className="modern-donut" style={{ background: donutGradient }}>
+                                            <div className="donut-inner-hole">
                                                 <strong>{totalServiceCustomers}</strong>
-                                                <span>Total visits</span>
+                                                <span>Visits</span>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <div className="qd-service-legend">
+                                    <div className="modern-legend-list">
                                         {serviceBreakdown.length === 0 ? (
-                                            <p>No services added yet.</p>
+                                            <p className="empty-legend-text">No services added yet.</p>
                                         ) : (
                                             serviceBreakdown.map((service, index) => (
-                                                <div key={service.name}>
-                                                    <span className="legend-dot" style={{ backgroundColor: chartColors[index % chartColors.length] }} />
-                                                    {service.name}
+                                                <div key={service.name} className="legend-row">
+                                                    <div className="legend-name-wrap">
+                                                        <span className="dot" style={{ backgroundColor: chartColors[index % chartColors.length] }} />
+                                                        <span>{service.name}</span>
+                                                    </div>
                                                     <strong>{service.count}</strong>
                                                 </div>
                                             ))
@@ -683,31 +767,32 @@ function Dashboard() {
                                 </article>
                             </section>
 
-                            {/* Recent Activity */}
-                            <section className="qd-panel qd-activity-panel">
-                                <div className="qd-panel-heading">
+                            {/* Recent Activity Feed */}
+                            <section className="qd-modern-panel">
+                                <div className="panel-title-bar">
                                     <div>
-                                        <h2>Recent Updates</h2>
-                                        <p>Real-time queue transactions today</p>
+                                        <h3>Recent Queue Updates</h3>
+                                        <p>{timeRange === "today" ? "Transactions created today" : "Latest updates across all queues"}</p>
                                     </div>
                                 </div>
 
-                                <div className="qd-activity-list">
+                                <div className="modern-activity-feed">
                                     {recentActivity.length === 0 ? (
-                                        <p>No transactions yet. Generate a token or invite staff to get started.</p>
+                                        <div className="empty-feed">
+                                            <span>☕</span>
+                                            <p>No transactions yet. Generate a token or click "Load Demo Dataset" above!</p>
+                                        </div>
                                     ) : (
                                         recentActivity.map((item) => (
-                                            <div className="qd-activity-item" key={item._id}>
-                                                <span className={`qd-activity-icon ${item.status === "completed" ? "green" : item.status === "cancelled" ? "orange" : "purple"}`}>
-                                                    {item.status === "completed" ? "✓" : item.status === "cancelled" ? "✕" : "⚡"}
-                                                </span>
-                                                <div>
-                                                    <strong>
-                                                        Token {item.serviceName?.slice(0, 1).toUpperCase()}-{String(item.tokenNumber).padStart(3, "0")} is {item.status}
-                                                    </strong>
+                                            <div key={item._id} className="feed-item">
+                                                <div className={`status-icon-dot ${item.status}`}>
+                                                    {item.status === "completed" ? "✓" : item.status === "serving" ? "⚡" : item.status === "cancelled" ? "✕" : "⏳"}
+                                                </div>
+                                                <div className="feed-info">
+                                                    <strong>Token #{item.serviceName?.slice(0, 1).toUpperCase()}-{String(item.tokenNumber).padStart(3, "0")} is {item.status.toUpperCase()}</strong>
                                                     <p>{item.customerName} · {item.serviceName} {item.counterNumber ? `· ${item.counterNumber}` : ""}</p>
                                                 </div>
-                                                <span className="qd-activity-time">
+                                                <span className="feed-time">
                                                     {new Date(item.updatedAt || item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                                                 </span>
                                             </div>
@@ -720,131 +805,124 @@ function Dashboard() {
 
                     {/* ================= VIEW 2: LIVE QUEUE ================= */}
                     {activeNav === "Live Queue" && (
-                        <section className="qd-panel qd-queue-panel">
-                            <div className="qd-panel-heading">
+                        <section className="qd-modern-panel">
+                            <div className="panel-title-bar">
                                 <div>
-                                    <div className="qd-heading-with-live">
-                                        <h2>Live Queue Control Board</h2>
-                                        <span className="qd-live-badge"><i /> LIVE</span>
+                                    <div className="title-with-pill">
+                                        <h3>Live Queue Desk</h3>
+                                        <span className="live-pulsing-pill"><span className="pulse-dot" /> LIVE</span>
                                     </div>
-                                    <p>Real-time customer status at all service counters</p>
+                                    <p>Managing queue for {timeRange === "today" ? "Today" : "All-Time"}</p>
                                 </div>
 
-                                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                                <div className="panel-actions">
                                     <button
-                                        className="qd-outline-button"
-                                        style={{ background: "#786cf6", color: "white" }}
+                                        className="qd-cta-primary-btn"
                                         onClick={() => handleCallNext()}
                                         disabled={callingNextLoading || stats.waiting === 0}
                                     >
                                         ⚡ Call Next Customer
                                     </button>
                                     <button
-                                        className="qd-outline-button"
+                                        className="qd-glass-icon-btn"
                                         onClick={() => { fetchQueue(); fetchStats(); }}
+                                        title="Refresh"
                                     >
-                                        ↻ Refresh Queue
+                                        🔄
                                     </button>
                                 </div>
                             </div>
 
-                            {/* Status Filter Buttons */}
-                            <div style={{ display: "flex", gap: "8px", margin: "16px 0", flexWrap: "wrap" }}>
-                                {["all", "waiting", "serving", "completed", "cancelled"].map((st) => (
-                                    <button
-                                        key={st}
-                                        type="button"
-                                        onClick={() => setQueueStatusFilter(st)}
-                                        style={{
-                                            padding: "6px 14px",
-                                            borderRadius: "20px",
-                                            border: "1px solid #e2e8f0",
-                                            background: queueStatusFilter === st ? "#786cf6" : "#f1f5f9",
-                                            color: queueStatusFilter === st ? "white" : "#475569",
-                                            fontSize: "12px",
-                                            fontWeight: 700,
-                                            cursor: "pointer",
-                                            textTransform: "capitalize",
-                                        }}
-                                    >
-                                        {st} ({st === "all" ? queueData.length : queueData.filter((q) => q.status === st).length})
-                                    </button>
-                                ))}
+                            {/* Filter Bar */}
+                            <div className="queue-filter-bar">
+                                <div className="filter-chips">
+                                    {["all", "waiting", "serving", "completed", "cancelled"].map((st) => (
+                                        <button
+                                            key={st}
+                                            className={`chip-btn ${queueStatusFilter === st ? "active-chip" : ""}`}
+                                            onClick={() => setQueueStatusFilter(st)}
+                                        >
+                                            {st.toUpperCase()} ({st === "all" ? activeDataset.length : activeDataset.filter((q) => q.status === st).length})
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <div className="queue-search-input">
+                                    <span>🔍</span>
+                                    <input
+                                        type="search"
+                                        placeholder="Search customer or service..."
+                                        value={customerSearch}
+                                        onChange={(e) => setCustomerSearch(e.target.value)}
+                                    />
+                                </div>
                             </div>
 
-                            <div className="qd-customer-search">
-                                <input
-                                    type="search"
-                                    placeholder="Search customer or service..."
-                                    value={customerSearch}
-                                    onChange={(e) => setCustomerSearch(e.target.value)}
-                                />
-                            </div>
-
-                            <div className="qd-table-wrap">
-                                <table className="qd-table">
+                            {/* Table */}
+                            <div className="modern-table-container">
+                                <table className="modern-table">
                                     <thead>
                                         <tr>
                                             <th>Token</th>
-                                            <th>Customer</th>
-                                            <th>Service</th>
-                                            <th>Counter</th>
+                                            <th>Customer Name</th>
+                                            <th>Department / Service</th>
+                                            <th>Station</th>
                                             <th>Wait Time</th>
-                                            <th>Status & Actions</th>
+                                            <th>Status & Quick Action</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {queueLoading ? (
-                                            <tr><td colSpan="6">Loading live queue...</td></tr>
+                                            <tr><td colSpan="6" className="table-state-cell">Loading queues...</td></tr>
                                         ) : filteredCustomers.length === 0 ? (
-                                            <tr><td colSpan="6">No queue entries matching filter.</td></tr>
+                                            <tr><td colSpan="6" className="table-state-cell">No queue records matching your filter.</td></tr>
                                         ) : (
                                             filteredCustomers.map((item) => (
                                                 <tr key={item._id}>
                                                     <td>
-                                                        <span className="qd-token">
+                                                        <span className="modern-token-badge">
                                                             {item.serviceName.slice(0, 1).toUpperCase()}-{String(item.tokenNumber).padStart(3, "0")}
                                                         </span>
                                                     </td>
                                                     <td>
-                                                        <div className="qd-customer">
-                                                            <strong>{item.customerName}</strong>
-                                                            {item.customerPhone && <small style={{ color: "#64748b" }}> ({item.customerPhone})</small>}
-                                                        </div>
+                                                        <strong className="customer-cell-name">{item.customerName}</strong>
+                                                        {item.customerPhone && <span className="customer-cell-phone">{item.customerPhone}</span>}
                                                     </td>
                                                     <td>{item.serviceName}</td>
                                                     <td>{item.counterNumber || "-"}</td>
                                                     <td>{item.estimatedWaitMinutes} min</td>
                                                     <td>
-                                                        <span className={`qd-queue-status ${item.status}`}>
-                                                            <i /> {item.status.toUpperCase()}
-                                                        </span>
+                                                        <div className="status-action-cell">
+                                                            <span className={`status-pill-badge ${item.status}`}>
+                                                                {item.status.toUpperCase()}
+                                                            </span>
 
-                                                        <div style={{ display: "flex", gap: "6px", marginTop: "6px", flexWrap: "wrap" }}>
-                                                            {item.status === "waiting" && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => handleStatusChange(item._id, "serving")}
-                                                                >
-                                                                    Serve
-                                                                </button>
-                                                            )}
-                                                            {item.status === "serving" && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => handleStatusChange(item._id, "completed")}
-                                                                >
-                                                                    ✓ Done
-                                                                </button>
-                                                            )}
-                                                            {(item.status === "waiting" || item.status === "serving") && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => handleStatusChange(item._id, "cancelled")}
-                                                                >
-                                                                    ✕ Cancel
-                                                                </button>
-                                                            )}
+                                                            <div className="inline-action-btns">
+                                                                {item.status === "waiting" && (
+                                                                    <button
+                                                                        className="mini-btn serve-btn"
+                                                                        onClick={() => handleStatusChange(item._id, "serving")}
+                                                                    >
+                                                                        Serve ↗
+                                                                    </button>
+                                                                )}
+                                                                {item.status === "serving" && (
+                                                                    <button
+                                                                        className="mini-btn done-btn"
+                                                                        onClick={() => handleStatusChange(item._id, "completed")}
+                                                                    >
+                                                                        ✓ Done
+                                                                    </button>
+                                                                )}
+                                                                {(item.status === "waiting" || item.status === "serving") && (
+                                                                    <button
+                                                                        className="mini-btn cancel-btn"
+                                                                        onClick={() => handleStatusChange(item._id, "cancelled")}
+                                                                    >
+                                                                        ✕
+                                                                    </button>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -858,139 +936,109 @@ function Dashboard() {
 
                     {/* ================= VIEW 3: STAFF & COUNTERS ================= */}
                     {activeNav === "Staff & Counters" && (
-                        <section className="qd-panel">
-                            <div className="qd-panel-heading">
+                        <section className="qd-modern-panel">
+                            <div className="panel-title-bar">
                                 <div>
-                                    <h2>Staff & Counter Management</h2>
-                                    <p>Assign service staff members to counters using unique invite codes</p>
+                                    <h3>Staff Members & Counter Stations</h3>
+                                    <p>Invite service staff and assign them to dedicated counters using unique invite codes</p>
                                 </div>
                             </div>
 
-                            {/* Staff Invite Generator Form */}
-                            <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "14px", padding: "20px", marginBottom: "28px" }}>
-                                <h3 style={{ margin: "0 0 12px", fontSize: "16px" }}>Invite & Assign Staff Member</h3>
+                            {/* Staff Invite Box */}
+                            <div className="staff-invite-card-modern">
+                                <h4>Generate Unique Staff Invite Code</h4>
                                 {staffMessage && (
-                                    <p style={{ color: staffMessage.includes("success") ? "#15803d" : "#dc2626", fontSize: "13px", fontWeight: 600, marginBottom: "12px" }}>
+                                    <p className={`staff-alert ${staffMessage.includes("success") ? "success" : "error"}`}>
                                         {staffMessage}
                                     </p>
                                 )}
-                                <form onSubmit={handleGenerateStaffInvite} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px" }}>
-                                    <div>
-                                        <label style={{ fontSize: "12px", fontWeight: 700, color: "#64748b" }}>Staff Name</label>
-                                        <input
-                                            type="text"
-                                            placeholder="e.g. Rahul Sharma"
-                                            value={inviteStaffName}
-                                            onChange={(e) => setInviteStaffName(e.target.value)}
-                                            style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1" }}
-                                            required
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label style={{ fontSize: "12px", fontWeight: 700, color: "#64748b" }}>Staff Email</label>
-                                        <input
-                                            type="email"
-                                            placeholder="staff@example.com"
-                                            value={inviteStaffEmail}
-                                            onChange={(e) => setInviteStaffEmail(e.target.value)}
-                                            style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1" }}
-                                            required
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label style={{ fontSize: "12px", fontWeight: 700, color: "#64748b" }}>Assigned Service</label>
-                                        <select
-                                            value={inviteServiceName}
-                                            onChange={(e) => setInviteServiceName(e.target.value)}
-                                            style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1" }}
-                                            required
-                                            disabled={services.length === 0}
-                                        >
-                                            <option value="" disabled>Select service</option>
-                                            {services.map((srv) => (
-                                                <option key={srv} value={srv}>{srv}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label style={{ fontSize: "12px", fontWeight: 700, color: "#64748b" }}>Counter Station</label>
-                                        <input
-                                            type="text"
-                                            placeholder="e.g. Counter 1"
-                                            value={inviteCounter}
-                                            onChange={(e) => setInviteCounter(e.target.value)}
-                                            style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1" }}
-                                            required
-                                        />
-                                    </div>
-
-                                    <div style={{ display: "flex", alignItems: "flex-end" }}>
-                                        <button
-                                            type="submit"
-                                            style={{ width: "100%", height: "38px", background: "#786cf6", color: "white", border: "none", borderRadius: "8px", fontWeight: 700 }}
-                                            disabled={staffLoading || services.length === 0}
-                                        >
-                                            {staffLoading ? "Generating..." : "Generate Staff Code"}
-                                        </button>
-                                    </div>
+                                <form onSubmit={handleGenerateStaffInvite} className="staff-invite-form-grid">
+                                    <input
+                                        type="text"
+                                        placeholder="Staff Name"
+                                        value={inviteStaffName}
+                                        onChange={(e) => setInviteStaffName(e.target.value)}
+                                        required
+                                    />
+                                    <input
+                                        type="email"
+                                        placeholder="Staff Email"
+                                        value={inviteStaffEmail}
+                                        onChange={(e) => setInviteStaffEmail(e.target.value)}
+                                        required
+                                    />
+                                    <select
+                                        value={inviteServiceName}
+                                        onChange={(e) => setInviteServiceName(e.target.value)}
+                                        required
+                                        disabled={services.length === 0}
+                                    >
+                                        <option value="" disabled>Select Assigned Service</option>
+                                        {services.map((srv) => (
+                                            <option key={srv} value={srv}>{srv}</option>
+                                        ))}
+                                    </select>
+                                    <input
+                                        type="text"
+                                        placeholder="Station (e.g. Counter 1)"
+                                        value={inviteCounter}
+                                        onChange={(e) => setInviteCounter(e.target.value)}
+                                        required
+                                    />
+                                    <button type="submit" className="generate-code-btn" disabled={staffLoading || services.length === 0}>
+                                        {staffLoading ? "Generating..." : "Generate Code 🔑"}
+                                    </button>
                                 </form>
 
                                 {lastGeneratedCode && (
-                                    <div style={{ marginTop: "16px", background: "#f0fdf4", border: "1px solid #86efac", padding: "14px", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                    <div className="code-success-callout">
                                         <div>
-                                            <strong style={{ color: "#15803d", display: "block" }}>UNIQUE STAFF INVITE CODE GENERATED:</strong>
-                                            <span style={{ fontSize: "24px", fontWeight: 900, color: "#166534", letterSpacing: "2px" }}>{lastGeneratedCode}</span>
-                                            <p style={{ margin: "4px 0 0", fontSize: "12px", color: "#15803d" }}>
-                                                Share this code with your staff member. They will enter this code on the registration page to register as Counter Staff.
-                                            </p>
+                                            <span className="code-label">ACTIVE INVITE CODE</span>
+                                            <strong className="code-display">{lastGeneratedCode}</strong>
+                                            <p>Share this code with your staff member. They will enter this code on the register screen to link to their assigned counter.</p>
                                         </div>
                                         <button
-                                            type="button"
+                                            className="copy-code-btn"
                                             onClick={() => {
                                                 navigator.clipboard.writeText(lastGeneratedCode);
-                                                alert(`Code ${lastGeneratedCode} copied to clipboard!`);
+                                                alert(`Copied ${lastGeneratedCode} to clipboard!`);
                                             }}
-                                            style={{ background: "#15803d", color: "white", border: "none", padding: "8px 16px", borderRadius: "8px", fontWeight: 700, cursor: "pointer" }}
                                         >
-                                            Copy Code
+                                            Copy Code 📋
                                         </button>
                                     </div>
                                 )}
                             </div>
 
-                            {/* Active Staff List */}
-                            <h3 style={{ fontSize: "18px", marginBottom: "12px" }}>Active Staff Members ({staffList.length})</h3>
-                            <div className="qd-table-wrap" style={{ marginBottom: "28px" }}>
-                                <table className="qd-table">
+                            {/* Active Staff Table */}
+                            <h4 className="section-sub-heading">Active Staff Members ({staffList.length})</h4>
+                            <div className="modern-table-container">
+                                <table className="modern-table">
                                     <thead>
                                         <tr>
                                             <th>Staff Member</th>
                                             <th>Email</th>
-                                            <th>Assigned Service</th>
-                                            <th>Counter</th>
-                                            <th>Action</th>
+                                            <th>Assigned Department</th>
+                                            <th>Station</th>
+                                            <th>Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {staffList.length === 0 ? (
-                                            <tr><td colSpan="5">No registered staff members yet. Generate an invite code above.</td></tr>
+                                            <tr><td colSpan="5" className="table-state-cell">No staff members registered yet. Generate an invite code above.</td></tr>
                                         ) : (
                                             staffList.map((st) => (
                                                 <tr key={st._id}>
                                                     <td><strong>{st.name}</strong></td>
                                                     <td>{st.email}</td>
-                                                    <td><span className="qd-token" style={{ background: "#ede9fe", color: "#6d28d9" }}>{st.assignedService}</span></td>
-                                                    <td>{st.counterNumber || "Counter 1"}</td>
+                                                    <td><span className="service-pill-tag">{st.assignedService}</span></td>
+                                                    <td><strong>{st.counterNumber || "Counter 1"}</strong></td>
                                                     <td>
                                                         <button
-                                                            type="button"
-                                                            style={{ color: "#dc2626", background: "none", border: "none", cursor: "pointer", fontWeight: 700 }}
+                                                            className="table-delete-btn"
                                                             onClick={() => handleRemoveStaff(st._id, st.name)}
                                                         >
-                                                            Remove Staff
+                                                            Remove
                                                         </button>
                                                     </td>
                                                 </tr>
@@ -1000,37 +1048,34 @@ function Dashboard() {
                                 </table>
                             </div>
 
-                            {/* Pending Unused Invites */}
+                            {/* Pending Invites */}
                             {pendingInvites.length > 0 && (
                                 <>
-                                    <h3 style={{ fontSize: "18px", marginBottom: "12px" }}>Pending Invite Codes ({pendingInvites.length})</h3>
-                                    <div className="qd-table-wrap">
-                                        <table className="qd-table">
+                                    <h4 className="section-sub-heading" style={{ marginTop: "28px" }}>Pending Unused Invites ({pendingInvites.length})</h4>
+                                    <div className="modern-table-container">
+                                        <table className="modern-table">
                                             <thead>
                                                 <tr>
                                                     <th>Invite Code</th>
                                                     <th>Staff Name / Email</th>
-                                                    <th>Assigned Service</th>
-                                                    <th>Counter</th>
-                                                    <th>Action</th>
+                                                    <th>Assigned Department</th>
+                                                    <th>Station</th>
+                                                    <th>Actions</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {pendingInvites.map((inv) => (
                                                     <tr key={inv._id}>
-                                                        <td>
-                                                            <strong style={{ letterSpacing: "1px", color: "#2563eb" }}>{inv.code}</strong>
-                                                        </td>
+                                                        <td><strong className="inv-code-text">{inv.code}</strong></td>
                                                         <td>{inv.staffName || inv.staffEmail || "Unassigned"}</td>
                                                         <td>{inv.serviceName}</td>
                                                         <td>{inv.counterNumber}</td>
                                                         <td>
                                                             <button
-                                                                type="button"
-                                                                style={{ color: "#dc2626", background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}
+                                                                className="table-delete-btn"
                                                                 onClick={() => handleRevokeInvite(inv._id)}
                                                             >
-                                                                Revoke Code
+                                                                Revoke
                                                             </button>
                                                         </td>
                                                     </tr>
@@ -1043,45 +1088,45 @@ function Dashboard() {
                         </section>
                     )}
 
-                    {/* ================= VIEW 4: CUSTOMERS DIRECTORY ================= */}
+                    {/* ================= VIEW 4: CUSTOMERS ================= */}
                     {activeNav === "Customers" && (
-                        <section className="qd-panel">
-                            <div className="qd-panel-heading">
+                        <section className="qd-modern-panel">
+                            <div className="panel-title-bar">
                                 <div>
-                                    <h2>Customer Directory & History</h2>
-                                    <p>Comprehensive record of all customers who queued at your service centre</p>
+                                    <h3>Customer Directory</h3>
+                                    <p>History of all customers who queued at your service center</p>
+                                </div>
+                                <div className="queue-search-input">
+                                    <span>🔍</span>
+                                    <input
+                                        type="search"
+                                        placeholder="Search customer name..."
+                                        value={customerSearch}
+                                        onChange={(e) => setCustomerSearch(e.target.value)}
+                                    />
                                 </div>
                             </div>
 
-                            <div className="qd-customer-search">
-                                <input
-                                    type="search"
-                                    placeholder="Search by customer name or phone..."
-                                    value={customerSearch}
-                                    onChange={(e) => setCustomerSearch(e.target.value)}
-                                />
-                            </div>
-
-                            <div className="qd-table-wrap">
-                                <table className="qd-table">
+                            <div className="modern-table-container">
+                                <table className="modern-table">
                                     <thead>
                                         <tr>
                                             <th>Token</th>
                                             <th>Customer Name</th>
                                             <th>Phone</th>
-                                            <th>Service</th>
+                                            <th>Department</th>
                                             <th>Issued At</th>
                                             <th>Status</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {filteredCustomers.length === 0 ? (
-                                            <tr><td colSpan="6">No customers found.</td></tr>
+                                            <tr><td colSpan="6" className="table-state-cell">No customers found.</td></tr>
                                         ) : (
                                             filteredCustomers.map((item) => (
                                                 <tr key={item._id}>
                                                     <td>
-                                                        <span className="qd-token">
+                                                        <span className="modern-token-badge">
                                                             {item.serviceName.slice(0, 1).toUpperCase()}-{String(item.tokenNumber).padStart(3, "0")}
                                                         </span>
                                                     </td>
@@ -1090,7 +1135,7 @@ function Dashboard() {
                                                     <td>{item.serviceName}</td>
                                                     <td>{new Date(item.createdAt).toLocaleString()}</td>
                                                     <td>
-                                                        <span className={`qd-queue-status ${item.status}`}>
+                                                        <span className={`status-pill-badge ${item.status}`}>
                                                             {item.status.toUpperCase()}
                                                         </span>
                                                     </td>
@@ -1103,17 +1148,17 @@ function Dashboard() {
                         </section>
                     )}
 
-                    {/* ================= VIEW 5: SERVICES MANAGEMENT ================= */}
+                    {/* ================= VIEW 5: SERVICES ================= */}
                     {activeNav === "Services" && (
-                        <section className="qd-panel">
-                            <div className="qd-panel-heading">
+                        <section className="qd-modern-panel">
+                            <div className="panel-title-bar">
                                 <div>
-                                    <h2>Service Categories & Desks</h2>
-                                    <p>Configure which services are available for queue booking</p>
+                                    <h3>Service Categories & Counters</h3>
+                                    <p>Configure which departments and desks are active for queue management</p>
                                 </div>
                             </div>
 
-                            <form className="qd-add-customer-form" onSubmit={handleAddService} style={{ marginBottom: "24px" }}>
+                            <form className="add-service-modern-form" onSubmit={handleAddService}>
                                 <input
                                     type="text"
                                     value={newServiceName}
@@ -1123,35 +1168,41 @@ function Dashboard() {
                                     required
                                 />
                                 <button type="submit" disabled={serviceLoading}>
-                                    {serviceLoading ? "Adding..." : "+ Add Service"}
+                                    {serviceLoading ? "Adding..." : "+ Create Service"}
                                 </button>
                             </form>
 
                             {serviceMessage && (
-                                <p style={{ color: serviceMessage.includes("success") ? "#15803d" : "#dc2626", marginBottom: "16px" }}>
+                                <p className={`service-msg ${serviceMessage.includes("success") ? "success" : "error"}`}>
                                     {serviceMessage}
                                 </p>
                             )}
 
-                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "16px" }}>
+                            <div className="services-modern-grid">
                                 {services.map((srv) => {
-                                    const waitingCount = todayQueueData.filter((q) => q.serviceName === srv && q.status === "waiting").length;
-                                    const totalCount = todayQueueData.filter((q) => q.serviceName === srv).length;
+                                    const waitingCount = activeDataset.filter((q) => q.serviceName === srv && q.status === "waiting").length;
+                                    const totalCount = activeDataset.filter((q) => q.serviceName === srv).length;
                                     return (
-                                        <div key={srv} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "18px", display: "flex", flexDirection: "column" }}>
-                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px" }}>
-                                                <h3 style={{ margin: 0, fontSize: "16px", color: "#1e293b" }}>{srv}</h3>
+                                        <div key={srv} className="service-card-modern">
+                                            <div className="service-card-top">
+                                                <h4>{srv}</h4>
                                                 <button
-                                                    type="button"
+                                                    className="delete-srv-btn"
                                                     onClick={() => handleDeleteService(srv)}
-                                                    style={{ color: "#ef4444", background: "none", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: 700 }}
+                                                    title="Delete Service"
                                                 >
-                                                    Delete
+                                                    ✕
                                                 </button>
                                             </div>
-                                            <div style={{ display: "flex", gap: "12px", marginTop: "auto", fontSize: "13px", color: "#64748b" }}>
-                                                <span>⏳ <b>{waitingCount}</b> waiting</span>
-                                                <span>📊 <b>{totalCount}</b> visits today</span>
+                                            <div className="service-metrics-row">
+                                                <div className="srv-stat">
+                                                    <span>Waiting</span>
+                                                    <strong className="amber-text">{waitingCount}</strong>
+                                                </div>
+                                                <div className="srv-stat">
+                                                    <span>{timeRange === "today" ? "Today's Visits" : "Total Visits"}</span>
+                                                    <strong>{totalCount}</strong>
+                                                </div>
                                             </div>
                                         </div>
                                     );
@@ -1160,8 +1211,8 @@ function Dashboard() {
                         </section>
                     )}
 
-                    <footer className="qd-footer">
-                        <span>© 2026 QueueLess · Less waiting. More living.</span>
+                    <footer className="qd-modern-footer">
+                        <span>© 2026 QueueLess · High-Performance Smart Queue System</span>
                     </footer>
                 </div>
             </main>
