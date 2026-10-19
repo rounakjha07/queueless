@@ -24,10 +24,15 @@ export default function QueueActivityChart({ data = [] }) {
     );
   }
 
-  const scrollable = data.length > 6;
+  const scrollable = data.length > 5;
 
   return (
     <div className="qa-chart-container">
+      {scrollable && (
+        <div className="qa-scroll-hint">
+          <span>⇄ Scroll horizontally ({data.length} services)</span>
+        </div>
+      )}
       <div className={`qa-bars-track ${scrollable ? "is-scrollable" : ""}`}>
         {data.map((item, index) => {
           const barHeight = Math.max((item.count / maxCount) * 140, 10);
