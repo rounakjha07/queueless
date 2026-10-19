@@ -1,24 +1,38 @@
 import express from "express";
 import Service from "../models/service.js";
+import User from "../models/user.js";
 import { protect } from "../middleware/authMiddleware.js";
 import Queue from "../models/queue.js";
 
 const router = express.Router();
 
-// Get all services for logged-in manager or staff
+// Get all services for logged-in manager or staff (filtered by allotted department for staff)
 router.get("/", protect, async (req, res) => {
     try {
         let managerId = req.user.id;
+        let staffAssignedService = null;
+
         if (req.user.role === "staff") {
             const staffUser = await User.findById(req.user.id);
             managerId = staffUser?.managerId;
+            staffAssignedService = staffUser?.assignedService?.trim() || null;
         }
 
-        const services = await Service.find({
-            createdBy: managerId,
-        }).sort({ name: 1 });
+        let query = { createdBy: managerId };
 
-        res.json({ success: true, services });
+        // For staff: strictly only return their allotted service/department
+        if (req.user.role === "staff" && staffAssignedService) {
+            query.name = { $regex: new RegExp(`^${staffAssignedService.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") };
+        }
+
+        let services = await Service.find(query).sort({ name: 1 });
+
+        // Fallback for staff if service doc wasn't found under that exact query
+        if (req.user.role === "staff" && staffAssignedService && services.length === 0) {
+            services = [{ name: staffAssignedService, _id: "allotted" }];
+        }
+
+        res.json({ success: true, services, assignedService: staffAssignedService });
     } catch (error) {
         console.error("Fetch services error:", error);
         res.status(500).json({

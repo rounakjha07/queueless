@@ -134,7 +134,11 @@ function Dashboard() {
             if (response.ok) {
                 const serviceNames = (data.services || []).map((service) => service.name);
                 setServices(serviceNames);
-                setServiceName((current) => serviceNames.includes(current) ? current : (serviceNames[0] || ""));
+                if (user?.role === "staff" && user?.assignedService) {
+                    setServiceName(user.assignedService);
+                } else {
+                    setServiceName((current) => serviceNames.includes(current) ? current : (serviceNames[0] || ""));
+                }
                 setInviteServiceName((current) => serviceNames.includes(current) ? current : (serviceNames[0] || ""));
             }
         } catch (err) {
@@ -196,6 +200,9 @@ function Dashboard() {
                 }
                 setUser(data.user);
                 if (data.user) {
+                    if (data.user.role === "staff" && data.user.assignedService) {
+                        setServiceName(data.user.assignedService);
+                    }
                     setLocationBusinessName(data.user.businessName || "");
                     setLocationAddress(data.user.address || "");
                     setLocationCity(data.user.city || "");
@@ -409,7 +416,11 @@ function Dashboard() {
     // Add Customer Token
     async function handleAddCustomer(event) {
         event.preventDefault();
-        if (!customerName.trim() || !serviceName.trim()) return;
+        const activeServiceName = (user?.role === "staff" && user?.assignedService)
+            ? user.assignedService
+            : serviceName;
+
+        if (!customerName.trim() || !activeServiceName.trim()) return;
         setAddingCustomer(true);
         try {
             const response = await fetch("http://localhost:5000/api/queue", {
@@ -419,7 +430,7 @@ function Dashboard() {
                 body: JSON.stringify({
                     customerName: customerName.trim(),
                     customerPhone: customerPhone.trim(),
-                    serviceName,
+                    serviceName: activeServiceName,
                 }),
             });
             const data = await response.json();
@@ -810,7 +821,12 @@ function Dashboard() {
                         {/* Add Walk-in Token */}
                         <button
                             className="qd-cta-glass-btn"
-                            onClick={() => setShowAddCustomer(true)}
+                            onClick={() => {
+                                if (isStaff && user?.assignedService) {
+                                    setServiceName(user.assignedService);
+                                }
+                                setShowAddCustomer(true);
+                            }}
                         >
                             + Issue Token
                         </button>
@@ -852,6 +868,7 @@ function Dashboard() {
                                     value={customerName}
                                     onChange={(e) => setCustomerName(e.target.value)}
                                     required
+                                    autoFocus
                                 />
                                 <input
                                     type="tel"
@@ -859,18 +876,48 @@ function Dashboard() {
                                     value={customerPhone}
                                     onChange={(e) => setCustomerPhone(e.target.value)}
                                 />
-                                <select
-                                    value={serviceName}
-                                    onChange={(e) => setServiceName(e.target.value)}
-                                    required
-                                    disabled={services.length === 0}
+
+                                {isStaff && user?.assignedService ? (
+                                    <div style={{
+                                        background: "var(--bg-muted, #f8fafc)",
+                                        padding: "10px 14px",
+                                        borderRadius: "10px",
+                                        border: "1px solid var(--border-color, #cbd5e1)",
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        alignItems: "center",
+                                    }}>
+                                        <div>
+                                            <span style={{ fontSize: "11px", color: "var(--text-muted, #64748b)", textTransform: "uppercase", fontWeight: "700", display: "block" }}>
+                                                Your Allotted Department
+                                            </span>
+                                            <strong style={{ fontSize: "14.5px", color: "var(--text-color, #1e293b)" }}>
+                                                🏢 {user.assignedService}
+                                            </strong>
+                                        </div>
+                                        <span style={{ fontSize: "11.5px", background: "#dbeafe", color: "#1e40af", padding: "4px 8px", borderRadius: "6px", fontWeight: "700" }}>
+                                            Auto-Assigned
+                                        </span>
+                                    </div>
+                                ) : (
+                                    <select
+                                        value={serviceName}
+                                        onChange={(e) => setServiceName(e.target.value)}
+                                        required
+                                        disabled={services.length === 0}
+                                    >
+                                        <option value="" disabled>Select Department / Service</option>
+                                        {services.map((srv) => (
+                                            <option key={srv} value={srv}>{srv}</option>
+                                        ))}
+                                    </select>
+                                )}
+
+                                <button
+                                    type="submit"
+                                    className="submit-token-btn"
+                                    disabled={addingCustomer || (!isStaff && services.length === 0)}
                                 >
-                                    <option value="" disabled>Select Department / Service</option>
-                                    {services.map((srv) => (
-                                        <option key={srv} value={srv}>{srv}</option>
-                                    ))}
-                                </select>
-                                <button type="submit" className="submit-token-btn" disabled={addingCustomer || services.length === 0}>
                                     {addingCustomer ? "Issuing..." : "Generate Token Now →"}
                                 </button>
                             </form>
