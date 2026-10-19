@@ -62,7 +62,7 @@ export default function CustomerPortal() {
           if (data.user.role === "customer") {
             setUser(data.user);
           } else {
-            navigate(data.user.role === "staff" ? "/staff-portal" : "/dashboard", { replace: true });
+            navigate("/dashboard", { replace: true });
             return;
           }
         }
