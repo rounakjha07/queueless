@@ -47,7 +47,7 @@ const userSchema = new mongoose.Schema(
       ref: "User",
     },
 
-    // Optional profile fields
+    // Optional profile & location fields
     phone: {
       type: String,
       trim: true,
@@ -55,6 +55,21 @@ const userSchema = new mongoose.Schema(
     businessName: {
       type: String,
       trim: true,
+    },
+    address: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    city: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    googleMapsUrl: {
+      type: String,
+      trim: true,
+      default: "",
     },
   },
   {

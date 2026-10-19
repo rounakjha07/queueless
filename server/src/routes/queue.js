@@ -138,7 +138,7 @@ router.get("/explore", async (req, res) => {
 
     const services = await Service.find().populate(
       "createdBy",
-      "name businessName email"
+      "name businessName email address city phone googleMapsUrl"
     );
 
     const serviceList = await Promise.all(
@@ -157,13 +157,32 @@ router.get("/explore", async (req, res) => {
           createdAt: { $gte: startOfDay, $lt: endOfDay },
         }).select("tokenNumber customerName counterNumber");
 
+        const providerAddress = srv.createdBy?.address || "";
+        const providerCity = srv.createdBy?.city || "";
+        const providerName = srv.createdBy?.businessName || srv.createdBy?.name || "Service Center";
+
+        let navigationUrl = srv.createdBy?.googleMapsUrl || "";
+        if (!navigationUrl && (providerAddress || providerCity)) {
+          const query = [providerName, providerAddress, providerCity].filter(Boolean).join(", ");
+          navigationUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+        }
+
         return {
           id: srv._id,
           name: srv.name,
+          description: srv.description || "Fast, transparent, and responsive counter service with digital queue notifications.",
+          category: srv.category || "General",
+          estimatedServiceMinutes: srv.estimatedServiceMinutes || 10,
+          operatingHours: srv.operatingHours || "09:00 AM - 06:00 PM",
+          requirements: srv.requirements && srv.requirements.length > 0 ? srv.requirements : ["Original Photo Identification (Aadhaar / Passport / DL)", "Service application or booking token"],
           managerId: srv.createdBy?._id,
-          providerName: srv.createdBy?.businessName || srv.createdBy?.name || "Service Center",
+          providerName,
+          providerAddress: providerAddress || "Main Office / Reception Desk",
+          providerCity: providerCity || "",
+          providerPhone: srv.createdBy?.phone || "",
+          navigationUrl,
           waitingCount,
-          estimatedWaitMinutes: waitingCount * 5,
+          estimatedWaitMinutes: waitingCount * (srv.estimatedServiceMinutes || 5),
           currentlyServingToken: servingNow ? servingNow.tokenNumber : null,
           currentlyServingCounter: servingNow ? servingNow.counterNumber : null,
         };

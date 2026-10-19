@@ -55,16 +55,9 @@ router.post("/register", registerLimiter, async (req, res) => {
             });
         }
 
-        if (role === "customer") {
-            return res.status(400).json({
-                success: false,
-                message: "Customer registration is not required! Please access your live queue directly using your Token Number and Phone.",
-            });
-        }
-
         const cleanName = name.trim();
         const cleanEmail = email.trim().toLowerCase();
-        const selectedRole = role === "staff" ? "staff" : "manager";
+        const selectedRole = ["manager", "staff", "customer"].includes(role) ? role : "customer";
 
         if (cleanName.length < 2 || cleanName.length > 80) {
             return res.status(400).json({
@@ -144,6 +137,9 @@ router.post("/register", registerLimiter, async (req, res) => {
             userData.businessName = typeof businessName === "string" && businessName.trim()
                 ? businessName.trim()
                 : `${cleanName}'s Service Center`;
+            userData.address = typeof req.body.address === "string" ? req.body.address.trim() : "";
+            userData.city = typeof req.body.city === "string" ? req.body.city.trim() : "";
+            userData.googleMapsUrl = typeof req.body.googleMapsUrl === "string" ? req.body.googleMapsUrl.trim() : "";
         }
 
         if (selectedRole === "staff" && staffInvite) {
@@ -177,6 +173,10 @@ router.post("/register", registerLimiter, async (req, res) => {
                 counterNumber: user.counterNumber,
                 managerId: user.managerId,
                 businessName: user.businessName,
+                address: user.address || "",
+                city: user.city || "",
+                phone: user.phone || "",
+                googleMapsUrl: user.googleMapsUrl || "",
             },
         });
     } catch (error) {
@@ -272,7 +272,10 @@ router.post("/login", loginLimiter, async (req, res) => {
                 counterNumber: user.counterNumber,
                 managerId: user.managerId,
                 businessName: user.businessName,
-                phone: user.phone,
+                address: user.address || "",
+                city: user.city || "",
+                phone: user.phone || "",
+                googleMapsUrl: user.googleMapsUrl || "",
             },
         });
     } catch (error) {
@@ -288,7 +291,7 @@ router.post("/login", loginLimiter, async (req, res) => {
 router.get("/me", protect, async (req, res) => {
     try {
         const user = await User.findById(req.user.id).select(
-            "name email role assignedService counterNumber managerId businessName phone"
+            "name email role assignedService counterNumber managerId businessName phone address city googleMapsUrl"
         );
 
         if (!user) {
@@ -309,7 +312,10 @@ router.get("/me", protect, async (req, res) => {
                 counterNumber: user.counterNumber,
                 managerId: user.managerId,
                 businessName: user.businessName,
-                phone: user.phone,
+                address: user.address || "",
+                city: user.city || "",
+                phone: user.phone || "",
+                googleMapsUrl: user.googleMapsUrl || "",
             },
         });
     } catch (error) {
@@ -321,6 +327,55 @@ router.get("/me", protect, async (req, res) => {
         });
     }
 });
+
+// Update Service Provider Center Location & Details
+router.put("/provider-location", protect, async (req, res) => {
+    try {
+        if (req.user.role !== "manager") {
+            return res.status(403).json({
+                success: false,
+                message: "Only Service Provider Head can set center location.",
+            });
+        }
+
+        const { businessName, address, city, phone, googleMapsUrl } = req.body;
+        const user = await User.findById(req.user.id);
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found." });
+        }
+
+        if (businessName) user.businessName = businessName.trim();
+        if (address !== undefined) user.address = address.trim();
+        if (city !== undefined) user.city = city.trim();
+        if (phone !== undefined) user.phone = phone.trim();
+        if (googleMapsUrl !== undefined) user.googleMapsUrl = googleMapsUrl.trim();
+
+        await user.save();
+
+        return res.json({
+            success: true,
+            message: "Service Center location and details saved successfully!",
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                businessName: user.businessName,
+                address: user.address || "",
+                city: user.city || "",
+                phone: user.phone || "",
+                googleMapsUrl: user.googleMapsUrl || "",
+            },
+        });
+    } catch (error) {
+        console.error("Update provider location error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to update center location.",
+        });
+    }
+});
+
 // Customer Token + Phone: Send Real-Time OTP
 router.post("/customer/send-otp", async (req, res) => {
     try {

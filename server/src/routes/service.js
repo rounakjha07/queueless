@@ -67,6 +67,11 @@ router.post("/", protect, async (req, res) => {
 
         const service = await Service.create({
             name,
+            description: req.body.description?.trim() || "",
+            category: req.body.category?.trim() || "General",
+            estimatedServiceMinutes: Number(req.body.estimatedServiceMinutes) || 10,
+            operatingHours: req.body.operatingHours?.trim() || "09:00 AM - 06:00 PM",
+            requirements: Array.isArray(req.body.requirements) ? req.body.requirements : (req.body.requirements ? [req.body.requirements] : []),
             createdBy: req.user.id,
         });
 

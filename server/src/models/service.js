@@ -9,6 +9,29 @@ const serviceSchema = new mongoose.Schema(
       trim: true,
       maxlength: 100,
     },
+    description: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    category: {
+      type: String,
+      trim: true,
+      default: "General",
+    },
+    estimatedServiceMinutes: {
+      type: Number,
+      default: 10,
+    },
+    operatingHours: {
+      type: String,
+      trim: true,
+      default: "09:00 AM - 06:00 PM",
+    },
+    requirements: {
+      type: [String],
+      default: [],
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

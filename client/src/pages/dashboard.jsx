@@ -82,6 +82,14 @@ function Dashboard() {
     const [aiInput, setAiInput] = useState("");
     const [aiChatLoading, setAiChatLoading] = useState(false);
 
+    // Service Center Location state (Manager)
+    const [showLocationModal, setShowLocationModal] = useState(false);
+    const [locationBusinessName, setLocationBusinessName] = useState("");
+    const [locationAddress, setLocationAddress] = useState("");
+    const [locationCity, setLocationCity] = useState("");
+    const [locationMapsUrl, setLocationMapsUrl] = useState("");
+    const [savingLocation, setSavingLocation] = useState(false);
+
     useEffect(() => {
         localStorage.setItem("queueless-theme", theme);
     }, [theme]);
@@ -187,6 +195,12 @@ function Dashboard() {
                     return;
                 }
                 setUser(data.user);
+                if (data.user) {
+                    setLocationBusinessName(data.user.businessName || "");
+                    setLocationAddress(data.user.address || "");
+                    setLocationCity(data.user.city || "");
+                    setLocationMapsUrl(data.user.googleMapsUrl || "");
+                }
             } catch {
                 setError("Unable to connect to the server.");
             } finally {
@@ -195,6 +209,33 @@ function Dashboard() {
         }
         fetchUser();
     }, [navigate]);
+
+    async function handleSaveLocation(e) {
+        e.preventDefault();
+        setSavingLocation(true);
+        try {
+            const res = await fetch("http://localhost:5000/api/auth/provider-location", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({
+                    businessName: locationBusinessName.trim(),
+                    address: locationAddress.trim(),
+                    city: locationCity.trim(),
+                    googleMapsUrl: locationMapsUrl.trim(),
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.message || "Failed to update location.");
+            setUser(data.user);
+            setShowLocationModal(false);
+            alert("✓ Center location and navigation details saved successfully!");
+        } catch (err) {
+            alert("⚠️ " + err.message);
+        } finally {
+            setSavingLocation(false);
+        }
+    }
 
     // Initial load + Real-time auto-refresh polling every 6s
     useEffect(() => {
@@ -755,6 +796,17 @@ function Dashboard() {
                             ⚡ Call Next
                         </button>
 
+                        {/* Center Location (Manager only) */}
+                        {user.role === "manager" && (
+                            <button
+                                className="qd-cta-glass-btn"
+                                onClick={() => setShowLocationModal(true)}
+                                title="Set service center address and Google Maps location for customers"
+                            >
+                                📍 Center Location
+                            </button>
+                        )}
+
                         {/* Add Walk-in Token */}
                         <button
                             className="qd-cta-glass-btn"
@@ -820,6 +872,74 @@ function Dashboard() {
                                 </select>
                                 <button type="submit" className="submit-token-btn" disabled={addingCustomer || services.length === 0}>
                                     {addingCustomer ? "Issuing..." : "Generate Token Now →"}
+                                </button>
+                            </form>
+                        </div>
+                    )}
+
+                    {/* Set Center Location Modal (Manager) */}
+                    {showLocationModal && (
+                        <div className="qd-modal-card" style={{ maxWidth: "540px" }}>
+                            <div className="modal-header">
+                                <h3>📍 Set Center Location & Navigation</h3>
+                                <button className="modal-close" onClick={() => setShowLocationModal(false)}>✕</button>
+                            </div>
+                            <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 16px", lineHeight: "1.5" }}>
+                                Set your exact physical location and address. Customers will be able to see this and use the <b>Get Directions / Google Maps</b> button directly from their dashboard.
+                            </p>
+                            <form onSubmit={handleSaveLocation} className="modal-form-grid">
+                                <div>
+                                    <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+                                        Service Center / Business Name
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. Apollo Healthcare or SBI Downtown Branch"
+                                        value={locationBusinessName}
+                                        onChange={(e) => setLocationBusinessName(e.target.value)}
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+                                        Street Address / Landmark
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. 14 MG Road, Near Central Metro Station"
+                                        value={locationAddress}
+                                        onChange={(e) => setLocationAddress(e.target.value)}
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+                                        City / Area
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. New Delhi"
+                                        value={locationCity}
+                                        onChange={(e) => setLocationCity(e.target.value)}
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+                                        Custom Google Maps URL (Optional)
+                                    </label>
+                                    <input
+                                        type="url"
+                                        placeholder="https://maps.google.com/?q=..."
+                                        value={locationMapsUrl}
+                                        onChange={(e) => setLocationMapsUrl(e.target.value)}
+                                    />
+                                    <span style={{ fontSize: "11px", color: "var(--text-muted)", display: "block", marginTop: "4px" }}>
+                                        Leave empty to auto-generate a verified search link from your address and city.
+                                    </span>
+                                </div>
+                                <button type="submit" className="submit-token-btn" disabled={savingLocation}>
+                                    {savingLocation ? "Saving Location..." : "Save Center Location 📍"}
                                 </button>
                             </form>
                         </div>

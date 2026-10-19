@@ -13,8 +13,14 @@ export default function CustomerPortal() {
   // Live Queue Telemetry state
   const [liveToken, setLiveToken] = useState(null);
   const [pastTokens, setPastTokens] = useState([]);
-  const [telemetryLoading, setTelemetryLoading] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState("");
+
+  // Explore Services across providers state
+  const [services, setServices] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("All");
+  const [activeModalService, setActiveModalService] = useState(null);
+  const [bookingLoading, setBookingLoading] = useState(false);
 
   // OTP Login states (when customer is not logged in)
   const [tokenInput, setTokenInput] = useState("");
@@ -43,7 +49,6 @@ export default function CustomerPortal() {
           if (data.user.role === "customer") {
             setUser(data.user);
           } else {
-            // If staff or manager visited /customer, redirect to dashboard
             navigate(data.user.role === "staff" ? "/staff-portal" : "/dashboard", { replace: true });
             return;
           }
@@ -84,7 +89,7 @@ export default function CustomerPortal() {
         setLiveToken(null);
       }
 
-      // Also fetch past token history
+      // Fetch past token history
       const historyRes = await fetch("http://localhost:5000/api/queue/my-tokens", {
         credentials: "include",
       });
@@ -97,11 +102,28 @@ export default function CustomerPortal() {
     }
   }
 
-  // Polling for live queue telemetry
+  // Fetch explore services across all providers
+  async function fetchExploreServices() {
+    try {
+      const res = await fetch("http://localhost:5000/api/queue/explore");
+      const data = await res.json();
+      if (res.ok && data.services) {
+        setServices(data.services);
+      }
+    } catch (err) {
+      console.error("Explore fetch error:", err);
+    }
+  }
+
+  // Polling for live queue telemetry & services
   useEffect(() => {
     if (!user) return;
     fetchLiveStatus();
-    const interval = setInterval(fetchLiveStatus, 3500);
+    fetchExploreServices();
+    const interval = setInterval(() => {
+      fetchLiveStatus();
+      fetchExploreServices();
+    }, 3500);
     return () => clearInterval(interval);
   }, [user]);
 
@@ -176,6 +198,37 @@ export default function CustomerPortal() {
     }
   }
 
+  // Handle Digital Token Booking
+  async function handleBookToken(service) {
+    setBookingLoading(true);
+    setFeedbackMsg("");
+    try {
+      const res = await fetch("http://localhost:5000/api/queue/book", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          serviceName: service.name,
+          managerId: service.managerId,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to book token.");
+      }
+
+      setFeedbackMsg(`✓ Token #${data.queue.tokenNumber} issued successfully for ${service.name}!`);
+      setActiveModalService(null);
+      await fetchLiveStatus();
+      await fetchExploreServices();
+    } catch (err) {
+      setFeedbackMsg("⚠️ " + err.message);
+    } finally {
+      setBookingLoading(false);
+    }
+  }
+
   // Handle Customer Logout / Switch Token
   async function handleLogout() {
     try {
@@ -212,11 +265,11 @@ export default function CustomerPortal() {
             <div className="cust-otp-icon">🎟️</div>
             <h1 className="cust-otp-title">Customer Live Token Portal</h1>
             <p className="cust-otp-subtitle">
-              No registration or account needed! Enter your <b>Token Number</b> & <b>Phone</b> to track your live queue status.
+              Enter your <b>Token Number</b> & <b>Phone</b> for quick OTP access, or log in with your registered account.
             </p>
           </div>
 
-          {/* Realistic SMS Delivery Simulation Toast */}
+          {/* Simulated SMS Toast */}
           {devOtpBanner && (
             <div className="cust-simulated-sms-banner">
               <span style={{ fontSize: "22px" }}>📱</span>
@@ -249,12 +302,12 @@ export default function CustomerPortal() {
 
           {/* STEP 1: Enter Token # & Phone */}
           {otpStep === 1 && (
-            <form onSubmit={handleSendOtp} className="cust-otp-form">
+            <form onSubmit={handleSendCustomerOtp} className="cust-otp-form">
               <div className="cust-input-group">
                 <label>Token Number</label>
                 <input
                   type="text"
-                  placeholder="e.g. 104 or B-104"
+                  placeholder="e.g. 4 or B-104"
                   value={tokenInput}
                   onChange={(e) => setTokenInput(e.target.value)}
                   required
@@ -277,9 +330,12 @@ export default function CustomerPortal() {
                 {otpLoading ? "Checking Token Record..." : "Send Verification OTP 📲"}
               </button>
 
-              <div style={{ textAlign: "center", marginTop: "14px" }}>
-                <Link to="/login" style={{ fontSize: "12.5px", color: "#64748b", textDecoration: "none" }}>
-                  Are you a Service Provider or Staff? <b>Log in here →</b>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "14px", fontSize: "12.5px" }}>
+                <Link to="/register" style={{ color: "#2563eb", textDecoration: "none", fontWeight: "700" }}>
+                  Create Customer Account ↗
+                </Link>
+                <Link to="/login" style={{ color: "#64748b", textDecoration: "none" }}>
+                  Login with Password →
                 </Link>
               </div>
             </form>
@@ -287,7 +343,7 @@ export default function CustomerPortal() {
 
           {/* STEP 2: Enter OTP */}
           {otpStep === 2 && (
-            <form onSubmit={handleVerifyOtp} className="cust-otp-form">
+            <form onSubmit={handleVerifyCustomerOtp} className="cust-otp-form">
               {tokenPreview && (
                 <div className="cust-token-preview-chip">
                   <div>
@@ -339,7 +395,7 @@ export default function CustomerPortal() {
                   type="button"
                   className="cust-back-btn"
                   disabled={countdown > 0}
-                  onClick={handleSendOtp}
+                  onClick={handleSendCustomerOtp}
                   style={{ color: countdown > 0 ? "#94a3b8" : "#2563eb" }}
                 >
                   {countdown > 0 ? `Resend OTP (${countdown}s)` : "Resend OTP"}
@@ -352,11 +408,24 @@ export default function CustomerPortal() {
     );
   }
 
-  // ================= VIEW B: AUTHENTICATED CUSTOMER LIVE DASHBOARD =================
+  // ================= VIEW B: AUTHENTICATED CUSTOMER DASHBOARD =================
   const isServing = liveToken?.status === "serving";
   const isWaiting = liveToken?.status === "waiting";
   const isCompleted = liveToken?.status === "completed";
   const isCancelled = liveToken?.status === "cancelled";
+
+  // Filter services by search query and category
+  const categories = ["All", "Healthcare", "Banking", "Government", "Salon & Wellness", "General"];
+  const filteredServices = services.filter((srv) => {
+    const matchesCat = selectedCategory === "All" || srv.category?.toLowerCase() === selectedCategory.toLowerCase();
+    const q = searchQuery.toLowerCase();
+    const matchesSearch =
+      srv.name.toLowerCase().includes(q) ||
+      srv.providerName.toLowerCase().includes(q) ||
+      (srv.providerAddress && srv.providerAddress.toLowerCase().includes(q)) ||
+      (srv.providerCity && srv.providerCity.toLowerCase().includes(q));
+    return matchesCat && matchesSearch;
+  });
 
   return (
     <div className="cust-app">
@@ -365,19 +434,19 @@ export default function CustomerPortal() {
         <div className="cust-brand">
           <span className="cust-logo-icon">Q</span>
           <span className="cust-brand-title">
-            QueueLess <b>Live Customer</b>
+            QueueLess <b>Customer</b>
           </span>
         </div>
 
         <div className="cust-user-nav">
           <div className="cust-user-badge">
             <div className="cust-avatar">
-              {liveToken?.customerName?.slice(0, 2).toUpperCase() || user.name?.slice(0, 2).toUpperCase() || "CU"}
+              {user.name?.slice(0, 2).toUpperCase() || "CU"}
             </div>
-            <span>{liveToken?.customerName || user.name}</span>
+            <span>{user.name}</span>
           </div>
-          <button className="cust-logout-btn" onClick={handleLogout} title="Switch or exit token session">
-            Switch Token ↗
+          <button className="cust-logout-btn" onClick={handleLogout} title="Log out or switch token">
+            Log Out ↗
           </button>
         </div>
       </header>
@@ -391,17 +460,22 @@ export default function CustomerPortal() {
           </div>
         )}
 
-        {/* Master Live Queue Card */}
+        {/* 1. Master Live Queue Hero Card */}
         <section className="cust-hero-section">
+          <div className="section-title-wrap">
+            <h2>My Active Queue Token</h2>
+            <p>Real-time updates on your wait time, position in line, and counter calls</p>
+          </div>
+
           {!liveToken ? (
             <div className="no-active-ticket-card">
               <div className="ticket-empty-icon">🎟️</div>
               <h3>No Active Token in Queue</h3>
-              <p>You have no pending waiting tokens right now. If you just received a new token slip at the counter, click "Switch Token" above to track it!</p>
+              <p>You are not currently waiting in any line. Browse the service providers below and tap any service to get a token and navigate to the center!</p>
             </div>
           ) : (
             <div className={`live-ticket-card ${isServing ? "ticket-serving-now" : "ticket-waiting"}`}>
-              {/* Top Row: Provider & Live Status Badge */}
+              {/* Top Row: Provider & Status */}
               <div className="ticket-top-row">
                 <div>
                   <span className="ticket-provider-badge">
@@ -419,7 +493,7 @@ export default function CustomerPortal() {
                 </div>
               </div>
 
-              {/* Big Hero Token Badge */}
+              {/* Big Token Number */}
               <div className="token-number-hero">
                 <span className="token-label">YOUR TOKEN CODE</span>
                 <strong className="token-code">{liveToken.tokenCode}</strong>
@@ -540,49 +614,241 @@ export default function CustomerPortal() {
           )}
         </section>
 
-        {/* Service Details & Preparation Checklist */}
-        {liveToken && (
-          <section className="cust-guide-box">
-            <h3 className="cust-guide-title">
-              <span>📋</span> Service Information & Counter Checklist
-            </h3>
+        {/* 2. Explore Services Across Providers Section */}
+        <section className="cust-explore-header">
+          <div className="section-title-wrap">
+            <h2>Explore Service Providers & Centers</h2>
+            <p>Browse active services, view physical locations, check wait times, and navigate with Google Maps</p>
+          </div>
 
-            <div className="cust-guide-grid">
-              <div className="cust-guide-item">
-                <span className="cust-guide-item-icon">🪪</span>
-                <div className="cust-guide-item-text">
-                  <strong>Identification & Documents</strong>
-                  <p>Keep your original ID card, booking slip, and relevant department files ready in hand before reaching the counter.</p>
+          {/* Search Row */}
+          <div className="cust-search-row">
+            <input
+              type="text"
+              className="cust-search-input"
+              placeholder="🔍 Search service, hospital, bank, or city/address..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+
+          {/* Category Pills */}
+          <div className="cust-category-pills">
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                className={`cust-category-pill ${selectedCategory === cat ? "active" : ""}`}
+                onClick={() => setSelectedCategory(cat)}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+
+          {/* Services Grid */}
+          {filteredServices.length === 0 ? (
+            <div className="empty-services-card" style={{ marginTop: "20px" }}>
+              <p>No services found matching your criteria. Try adjusting your search or category filter.</p>
+            </div>
+          ) : (
+            <div className="cust-services-grid">
+              {filteredServices.map((srv) => {
+                const alreadyBooked = liveToken && liveToken.serviceName === srv.name;
+                return (
+                  <div
+                    key={srv.id}
+                    className="cust-service-card"
+                    onClick={() => setActiveModalService(srv)}
+                  >
+                    <div>
+                      <div className="cust-card-top-tags">
+                        <span className="cust-provider-name-tag">
+                          🏢 {srv.providerName}
+                        </span>
+                        <span className="cust-category-badge">{srv.category}</span>
+                      </div>
+
+                      <h3 className="cust-service-title">{srv.name}</h3>
+
+                      {/* Location Badge */}
+                      <div className="cust-location-badge">
+                        <span>📍</span>
+                        <span style={{ fontWeight: "600" }}>
+                          {srv.providerAddress}
+                          {srv.providerCity ? `, ${srv.providerCity}` : ""}
+                        </span>
+                      </div>
+
+                      {/* Live Queue Telemetry Preview */}
+                      <div className="cust-card-telemetry">
+                        <div>
+                          <span>Live Wait</span>
+                          <strong style={{ color: "#2563eb" }}>~{srv.estimatedWaitMinutes} mins</strong>
+                        </div>
+                        <div>
+                          <span>Waiting In Line</span>
+                          <strong>{srv.waitingCount} customers</strong>
+                        </div>
+                        <div>
+                          <span>Serving</span>
+                          <strong style={{ color: "#059669" }}>
+                            {srv.currentlyServingToken ? `#${srv.currentlyServingToken}` : "Idle"}
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="cust-card-actions" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="cust-view-details-btn"
+                        onClick={() => setActiveModalService(srv)}
+                      >
+                        Details & Directions ↗
+                      </button>
+
+                      <button
+                        type="button"
+                        className="cust-quick-book-btn"
+                        disabled={bookingLoading || alreadyBooked}
+                        onClick={() => handleBookToken(srv)}
+                      >
+                        {alreadyBooked ? "✓ In Line" : "🎫 Book Token"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* 3. Interactive Service Details & Live Navigation Modal */}
+        {activeModalService && (
+          <div className="cust-modal-backdrop" onClick={() => setActiveModalService(null)}>
+            <div className="cust-modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="cust-modal-header">
+                <div>
+                  <span style={{ fontSize: "11.5px", color: "#64748b", textTransform: "uppercase", fontWeight: "700" }}>
+                    {activeModalService.category} Service
+                  </span>
+                  <h2 style={{ margin: "2px 0 0", fontSize: "20px", color: "#0f172a" }}>
+                    {activeModalService.name}
+                  </h2>
+                </div>
+                <button className="cust-modal-close-btn" onClick={() => setActiveModalService(null)}>
+                  ✕
+                </button>
+              </div>
+
+              {/* Exact Location & Navigation Card */}
+              <div className="cust-location-card-hero">
+                <h4>
+                  <span>📍</span> {activeModalService.providerName}
+                </h4>
+                <p>
+                  <b>Physical Location:</b> {activeModalService.providerAddress}
+                  {activeModalService.providerCity ? `, ${activeModalService.providerCity}` : ""}
+                  {activeModalService.providerPhone && (
+                    <span style={{ display: "block", marginTop: "4px" }}>
+                      📞 Contact: <b>{activeModalService.providerPhone}</b>
+                    </span>
+                  )}
+                </p>
+
+                {activeModalService.navigationUrl ? (
+                  <a
+                    href={activeModalService.navigationUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="cust-nav-btn"
+                  >
+                    🧭 Open in Google Maps Navigation ↗
+                  </a>
+                ) : (
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                      `${activeModalService.providerName} ${activeModalService.providerAddress} ${activeModalService.providerCity}`
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="cust-nav-btn"
+                  >
+                    🧭 Open in Google Maps Navigation ↗
+                  </a>
+                )}
+              </div>
+
+              {/* Real-time Queue Stats */}
+              <div className="cust-card-telemetry" style={{ padding: "14px 18px", borderRadius: "12px", margin: "18px 0" }}>
+                <div>
+                  <span>Current Wait</span>
+                  <strong style={{ fontSize: "16px", color: "#2563eb" }}>
+                    ~{activeModalService.estimatedWaitMinutes} mins
+                  </strong>
+                </div>
+                <div>
+                  <span>Queue Length</span>
+                  <strong style={{ fontSize: "16px" }}>{activeModalService.waitingCount} in line</strong>
+                </div>
+                <div>
+                  <span>Operating Hours</span>
+                  <strong style={{ fontSize: "14px", color: "#475569" }}>
+                    {activeModalService.operatingHours || "09:00 AM - 06:00 PM"}
+                  </strong>
                 </div>
               </div>
 
-              <div className="cust-guide-item">
-                <span className="cust-guide-item-icon">🔊</span>
-                <div className="cust-guide-item-text">
-                  <strong>Keep Sound Alert Enabled</strong>
-                  <p>When your turn arrives, an audio chime will play on your device. Please do not close this browser tab.</p>
-                </div>
+              {/* Service Description */}
+              <div style={{ marginBottom: "16px" }}>
+                <h4 style={{ fontSize: "13.5px", color: "#0f172a", margin: "0 0 6px" }}>
+                  Service Description
+                </h4>
+                <p style={{ margin: 0, fontSize: "13px", color: "#475569", lineHeight: "1.5" }}>
+                  {activeModalService.description || "Fast, transparent, and responsive counter service with digital queue notifications."}
+                </p>
               </div>
 
-              <div className="cust-guide-item">
-                <span className="cust-guide-item-icon">📍</span>
-                <div className="cust-guide-item-text">
-                  <strong>Counter Reporting Policy</strong>
-                  <p>
-                    Please reach {liveToken.counterNumber || "the assigned counter"} within 2 minutes of your announcement to prevent token re-call.
-                  </p>
-                </div>
+              {/* Requirements & Checklist */}
+              <div className="cust-modal-checklist">
+                <h5>📋 What to Bring / Required Documents</h5>
+                <ul>
+                  {(activeModalService.requirements && activeModalService.requirements.length > 0
+                    ? activeModalService.requirements
+                    : ["Original Photo Identification (Aadhaar / Driving License / Passport)", "Appointment confirmation or booking slip"]
+                  ).map((item, index) => (
+                    <li key={index}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: "flex", gap: "12px", marginTop: "22px" }}>
+                <button
+                  type="button"
+                  className="cust-submit-btn"
+                  style={{ flex: 1 }}
+                  disabled={bookingLoading || (liveToken && liveToken.serviceName === activeModalService.name)}
+                  onClick={() => handleBookToken(activeModalService)}
+                >
+                  {bookingLoading
+                    ? "Issuing Token..."
+                    : liveToken && liveToken.serviceName === activeModalService.name
+                    ? "✓ You Already Have an Active Token"
+                    : "🎫 Book Digital Token Now"}
+                </button>
               </div>
             </div>
-          </section>
+          </div>
         )}
 
-        {/* Past Tokens History */}
+        {/* 4. Past Tokens History */}
         {pastTokens.length > 0 && (
-          <section className="cust-history-section" style={{ marginTop: "24px" }}>
+          <section className="cust-history-section" style={{ marginTop: "32px" }}>
             <div className="section-title-wrap">
               <h2>My Previous Tokens</h2>
-              <p>Completed visits and history on this mobile number</p>
+              <p>Completed visits and history on this account</p>
             </div>
 
             <div className="history-table-wrap">
