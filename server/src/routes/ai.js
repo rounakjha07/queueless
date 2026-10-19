@@ -175,21 +175,35 @@ Current Service Center Context:
 - User Role: ${req.user.role}
 `;
 
-    // 1. If OpenAI API key is configured in .env
-    if (process.env.OPENAI_API_KEY) {
+    const activeApiKey = (req.headers["x-openai-key"] || req.body.apiKey || process.env.OPENAI_API_KEY || "").trim();
+
+    // 1. If OpenAI API key is configured (via header, body, or .env)
+    if (activeApiKey) {
       try {
         const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+            Authorization: `Bearer ${activeApiKey}`,
           },
           body: JSON.stringify({
             model: "gpt-4o-mini",
             messages: [
               {
                 role: "system",
-                content: `You are QueueCopilot AI, an intelligent queue optimization assistant for QueueLess. You analyze queue bottlenecks, advise service managers and counter staff, automate customer call tasks, and give crisp, professional responses. Answer questions in the language the user asked (English, Hindi, or Hinglish). Keep responses concise, clear, and actionable.\n${contextSummary}`,
+                content: `You are QueueCopilot AI, an intelligent queue optimization assistant for QueueLess. You analyze queue bottlenecks, advise service managers and counter staff, automate customer call tasks, and give crisp, professional responses.
+Answer questions in the language the user asked (English, Hindi, or Hinglish). Keep responses concise, clear, and actionable.
+
+${contextSummary}
+
+Instructions for Action Triggering:
+If the user asks to call the next customer, serve someone, or resolve a bottleneck, include an ACTION line at the end of your response in this exact format:
+ACTION: {"type": "call_next", "serviceName": "<ServiceName>", "label": "Call Next in <ServiceName> ⚡"}
+If the user asks to mark current customer done:
+ACTION: {"type": "complete_token", "tokenId": "<TokenId>", "label": "Mark Completed ✓"}
+If the user asks to load demo data:
+ACTION: {"type": "seed_demo", "label": "Load Demo Dataset 🚀"}
+Do not output ACTION if no specific action is needed.`,
               },
               { role: "user", content: message },
             ],
@@ -199,17 +213,33 @@ Current Service Center Context:
 
         const aiData = await aiResponse.json();
         if (aiData.choices?.[0]?.message?.content) {
-          const aiText = aiData.choices[0].message.content;
-          let possibleAction = null;
-          if (waiting.length > 0 && (message.toLowerCase().includes("call") || message.toLowerCase().includes("next") || message.toLowerCase().includes("bula"))) {
-            possibleAction = { type: "call_next", serviceName: waiting[0].serviceName, label: `Call #${waiting[0].tokenNumber} Now` };
+          let rawText = aiData.choices[0].message.content;
+          let action = null;
+
+          // Extract ACTION if returned
+          const actionMatch = rawText.match(/ACTION:\s*(\{.*\})/);
+          if (actionMatch) {
+            try {
+              action = JSON.parse(actionMatch[1]);
+              rawText = rawText.replace(/ACTION:\s*\{.*\}/, "").trim();
+            } catch (e) {
+              console.warn("Failed to parse ChatGPT ACTION json:", e);
+            }
           }
+
+          // Fallback heuristic for action if not extracted
+          if (!action && waiting.length > 0 && (message.toLowerCase().includes("call") || message.toLowerCase().includes("next") || message.toLowerCase().includes("bula"))) {
+            action = { type: "call_next", serviceName: waiting[0].serviceName, label: `Call #${waiting[0].tokenNumber} Now` };
+          }
+
           return res.json({
             success: true,
-            reply: aiText,
-            action: possibleAction,
-            provider: "OpenAI GPT-4o-mini",
+            reply: rawText,
+            action,
+            provider: "OpenAI ChatGPT (GPT-4o-mini)",
           });
+        } else if (aiData.error) {
+          console.warn("OpenAI API returned error:", aiData.error.message);
         }
       } catch (openAiErr) {
         console.warn("OpenAI API call failed, falling back to built-in smart assistant:", openAiErr.message);

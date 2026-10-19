@@ -68,11 +68,15 @@ function Dashboard() {
     // AI Copilot state
     const [aiInsights, setAiInsights] = useState(null);
     const [aiInsightsLoading, setAiInsightsLoading] = useState(false);
+    const [openAiKey, setOpenAiKey] = useState(() => localStorage.getItem("queueless-openai-key") || "");
+    const [showKeyModal, setShowKeyModal] = useState(false);
+    const [keyInput, setKeyInput] = useState(() => localStorage.getItem("queueless-openai-key") || "");
     const [aiMessages, setAiMessages] = useState([
         {
             sender: "assistant",
             text: "Hello! I am **QueueCopilot AI**.\n\nI continuously monitor your live waiting hall, detect queue bottlenecks, forecast wait times, and can automatically execute dispatch tasks.\n\nAsk me any question or tell me what task you want to execute!",
             action: null,
+            provider: null,
         },
     ]);
     const [aiInput, setAiInput] = useState("");
@@ -224,11 +228,16 @@ function Dashboard() {
         setAiChatLoading(true);
 
         try {
+            const headers = { "Content-Type": "application/json" };
+            if (openAiKey) {
+                headers["x-openai-key"] = openAiKey;
+            }
+
             const res = await fetch("http://localhost:5000/api/ai/chat", {
                 method: "POST",
                 credentials: "include",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ message: promptToSend }),
+                headers,
+                body: JSON.stringify({ message: promptToSend, apiKey: openAiKey }),
             });
             const data = await res.json();
             if (res.ok) {
@@ -238,6 +247,7 @@ function Dashboard() {
                         sender: "assistant",
                         text: data.reply || "Task processed.",
                         action: data.action || null,
+                        provider: data.provider || null,
                     },
                 ]);
             } else {
@@ -815,6 +825,58 @@ function Dashboard() {
                         </div>
                     )}
 
+                    {/* Configure ChatGPT API Key Modal */}
+                    {showKeyModal && (
+                        <div className="qd-modal-card" style={{ maxWidth: "560px" }}>
+                            <div className="modal-header">
+                                <h3>⚡ Connect ChatGPT API (OpenAI GPT-4o-mini)</h3>
+                                <button className="modal-close" onClick={() => setShowKeyModal(false)}>✕</button>
+                            </div>
+                            <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 16px", lineHeight: "1.5" }}>
+                                Enter your OpenAI API key below. QueueCopilot will use <b>GPT-4o-mini</b> for hyper-responsive queue orchestration, dispatch recommendations, and natural language query answering.
+                            </p>
+                            <form
+                                onSubmit={(e) => {
+                                    e.preventDefault();
+                                    const clean = keyInput.trim();
+                                    localStorage.setItem("queueless-openai-key", clean);
+                                    setOpenAiKey(clean);
+                                    setShowKeyModal(false);
+                                    alert(clean ? "ChatGPT API Key configured! GPT-4o-mini is now active." : "API key cleared. Built-in engine will be used.");
+                                }}
+                                className="modal-form-grid"
+                            >
+                                <input
+                                    type="password"
+                                    placeholder="sk-proj-..."
+                                    value={keyInput}
+                                    onChange={(e) => setKeyInput(e.target.value)}
+                                    required={!openAiKey}
+                                />
+                                <div style={{ display: "flex", gap: "10px" }}>
+                                    <button type="submit" className="submit-token-btn" style={{ flex: 1 }}>
+                                        Save & Activate ChatGPT 🚀
+                                    </button>
+                                    {openAiKey && (
+                                        <button
+                                            type="button"
+                                            className="modal-close"
+                                            style={{ background: "#ef444422", color: "#ef4444", borderRadius: "10px", padding: "0 16px", fontSize: "12px", fontWeight: "700" }}
+                                            onClick={() => {
+                                                localStorage.removeItem("queueless-openai-key");
+                                                setOpenAiKey("");
+                                                setKeyInput("");
+                                                setShowKeyModal(false);
+                                            }}
+                                        >
+                                            Remove Key
+                                        </button>
+                                    )}
+                                </div>
+                            </form>
+                        </div>
+                    )}
+
                     {/* ================= VIEW 1: OVERVIEW ================= */}
                     {activeNav === "Overview" && (
                         <>
@@ -1383,9 +1445,18 @@ function Dashboard() {
                                         Real-time operational optimization, bottleneck detection, and predictive dispatching
                                     </p>
                                 </div>
-                                <span className="ai-intelligence-pill">
-                                    <span className="ai-online-dot" /> Autonomous Agent Active
-                                </span>
+                                <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                                    <button
+                                        className="ai-key-config-btn"
+                                        onClick={() => setShowKeyModal(true)}
+                                        title="Configure ChatGPT / OpenAI API Key"
+                                    >
+                                        🔑 {openAiKey ? "ChatGPT (GPT-4o-mini) Connected ✓" : "Connect ChatGPT API"}
+                                    </button>
+                                    <span className="ai-intelligence-pill">
+                                        <span className="ai-online-dot" /> Autonomous Agent Active
+                                    </span>
+                                </div>
                             </div>
 
                             {/* 3 AI Analytics Cards */}
@@ -1471,6 +1542,11 @@ function Dashboard() {
                                                 {msg.sender === "assistant" ? "🤖" : "👤"}
                                             </div>
                                             <div className="chat-bubble-content">
+                                                {msg.provider && (
+                                                    <span style={{ fontSize: "10.5px", color: "#38bdf8", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+                                                        ⚡ {msg.provider}
+                                                    </span>
+                                                )}
                                                 <div style={{ whiteSpace: "pre-wrap" }}>{msg.text}</div>
                                                 {msg.action && (
                                                     <div className="chat-action-widget">
