@@ -39,6 +39,14 @@ export default function CustomerPortal() {
   const [manualTrackError, setManualTrackError] = useState("");
   const [manualTrackLoading, setManualTrackLoading] = useState(false);
 
+  // Registered Customer Login state (when unauthenticated)
+  const [customerAccessMode, setCustomerAccessMode] = useState("login"); // "login" or "otp"
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [customerPassword, setCustomerPassword] = useState("");
+  const [customerShowPassword, setCustomerShowPassword] = useState(false);
+  const [customerLoginLoading, setCustomerLoginLoading] = useState(false);
+  const [customerLoginError, setCustomerLoginError] = useState("");
+
   // Track chime playback to prevent repeat noise while token is serving
   const chimePlayedTokensRef = useRef(new Set());
 
@@ -238,6 +246,34 @@ export default function CustomerPortal() {
     }
   }
 
+  // Handle Registered Customer Email & Password Login
+  async function handleCustomerPasswordLogin(e) {
+    e.preventDefault();
+    setCustomerLoginError("");
+    setCustomerLoginLoading(true);
+    try {
+      const res = await fetch("http://localhost:5000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: customerEmail.trim(), password: customerPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || "Invalid email or password.");
+      }
+      if (data.user.role === "customer") {
+        setUser(data.user);
+      } else {
+        navigate(data.user.role === "staff" ? "/staff-portal" : "/dashboard", { replace: true });
+      }
+    } catch (err) {
+      setCustomerLoginError(err.message);
+    } finally {
+      setCustomerLoginLoading(false);
+    }
+  }
+
   // Handle Digital Token Booking
   async function handleBookToken(service) {
     setBookingLoading(true);
@@ -309,77 +345,215 @@ export default function CustomerPortal() {
             </p>
           </div>
 
-          {/* Simulated SMS Toast */}
-          {devOtpBanner && (
-            <div className="cust-simulated-sms-banner">
-              <span style={{ fontSize: "22px" }}>📱</span>
-              <div>
-                <strong style={{ display: "block", color: "#065f46", fontSize: "12.5px" }}>
-                  SMS Gateway: Instant OTP Generated!
-                </strong>
-                <span style={{ fontSize: "12.5px", color: "#047857" }}>
-                  Your verification code is:{" "}
-                  <b style={{ fontSize: "16px", letterSpacing: "2px", color: "#065f46" }}>
-                    {devOtpBanner}
-                  </b>{" "}
-                  (Valid for 5 mins)
-                </span>
-              </div>
-            </div>
-          )}
+          {/* 2-Tab Switcher: Account Login vs Counter Slip OTP */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: "6px",
+              background: "#f1f5f9",
+              padding: "4px",
+              borderRadius: "10px",
+              marginBottom: "18px",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setCustomerAccessMode("login");
+                setOtpError("");
+              }}
+              style={{
+                padding: "8px 10px",
+                border: "none",
+                borderRadius: "8px",
+                fontWeight: 700,
+                fontSize: "12.5px",
+                cursor: "pointer",
+                background: customerAccessMode === "login" ? "#ffffff" : "transparent",
+                color: customerAccessMode === "login" ? "#1e293b" : "#64748b",
+                boxShadow: customerAccessMode === "login" ? "0 2px 5px rgba(0,0,0,0.06)" : "none",
+                transition: "all 0.2s ease",
+              }}
+            >
+              🔑 Account Login
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setCustomerAccessMode("otp");
+                setCustomerLoginError("");
+              }}
+              style={{
+                padding: "8px 10px",
+                border: "none",
+                borderRadius: "8px",
+                fontWeight: 700,
+                fontSize: "12.5px",
+                cursor: "pointer",
+                background: customerAccessMode === "otp" ? "#ffffff" : "transparent",
+                color: customerAccessMode === "otp" ? "#1e293b" : "#64748b",
+                boxShadow: customerAccessMode === "otp" ? "0 2px 5px rgba(0,0,0,0.06)" : "none",
+                transition: "all 0.2s ease",
+              }}
+            >
+              🎟️ Counter Token (OTP)
+            </button>
+          </div>
 
-          {otpError && (
-            <div style={{ background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", padding: "12px 14px", borderRadius: "10px", fontSize: "13px", marginBottom: "16px" }}>
-              ⚠️ {otpError}
-            </div>
-          )}
+          {/* TAB 1: Registered Customer Email & Password Login */}
+          {customerAccessMode === "login" && (
+            <form onSubmit={handleCustomerPasswordLogin} className="cust-otp-form">
+              {customerLoginError && (
+                <div style={{ background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", padding: "10px 14px", borderRadius: "10px", fontSize: "13px", marginBottom: "14px" }}>
+                  ⚠️ {customerLoginError}
+                </div>
+              )}
 
-          {otpSuccessMsg && !devOtpBanner && (
-            <div style={{ background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0", padding: "12px 14px", borderRadius: "10px", fontSize: "13px", marginBottom: "16px" }}>
-              ✓ {otpSuccessMsg}
-            </div>
-          )}
-
-          {/* STEP 1: Enter Token # & Phone */}
-          {otpStep === 1 && (
-            <form onSubmit={handleSendCustomerOtp} className="cust-otp-form">
               <div className="cust-input-group">
-                <label>Token Number</label>
+                <label>Registered Email Address</label>
                 <input
-                  type="text"
-                  placeholder="e.g. 4 or B-104"
-                  value={tokenInput}
-                  onChange={(e) => setTokenInput(e.target.value)}
+                  type="email"
+                  placeholder="e.g. rohan@gmail.com"
+                  value={customerEmail}
+                  onChange={(e) => setCustomerEmail(e.target.value)}
                   required
                   autoFocus
                 />
               </div>
 
               <div className="cust-input-group">
-                <label>Mobile Number (Provided at Counter)</label>
-                <input
-                  type="tel"
-                  placeholder="e.g. 9876543210"
-                  value={phoneInput}
-                  onChange={(e) => setPhoneInput(e.target.value)}
-                  required
-                />
+                <label>Account Password</label>
+                <div style={{ position: "relative" }}>
+                  <input
+                    type={customerShowPassword ? "text" : "password"}
+                    placeholder="Enter your account password"
+                    value={customerPassword}
+                    onChange={(e) => setCustomerPassword(e.target.value)}
+                    required
+                    style={{ paddingRight: "50px", width: "100%", boxSizing: "border-box" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setCustomerShowPassword(!customerShowPassword)}
+                    style={{
+                      position: "absolute",
+                      right: "12px",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "none",
+                      border: "none",
+                      color: "#64748b",
+                      cursor: "pointer",
+                      fontSize: "12px",
+                      fontWeight: "700",
+                    }}
+                  >
+                    {customerShowPassword ? "Hide" : "Show"}
+                  </button>
+                </div>
               </div>
 
-              <button type="submit" className="cust-submit-btn" disabled={otpLoading}>
-                {otpLoading ? "Checking Token Record..." : "Track Token 🚀"}
+              <button type="submit" className="cust-submit-btn" disabled={customerLoginLoading}>
+                {customerLoginLoading ? "Logging in..." : "Log In to Customer Dashboard 🚀"}
               </button>
 
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "14px", fontSize: "12.5px" }}>
                 <Link to="/register" style={{ color: "#2563eb", textDecoration: "none", fontWeight: "700" }}>
                   Create Customer Account ↗
                 </Link>
-                <Link to="/login" style={{ color: "#64748b", textDecoration: "none" }}>
-                  Login with Password →
-                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomerAccessMode("otp");
+                    setCustomerLoginError("");
+                  }}
+                  style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", textDecoration: "underline", fontSize: "12px" }}
+                >
+                  Track Token with OTP →
+                </button>
               </div>
             </form>
           )}
+
+          {/* TAB 2: Walk-in Token OTP */}
+          {customerAccessMode === "otp" && (
+            <div>
+              {/* Simulated SMS Toast */}
+              {devOtpBanner && (
+                <div className="cust-simulated-sms-banner">
+                  <span style={{ fontSize: "22px" }}>📱</span>
+                  <div>
+                    <strong style={{ display: "block", color: "#065f46", fontSize: "12.5px" }}>
+                      SMS Gateway: Instant OTP Generated!
+                    </strong>
+                    <span style={{ fontSize: "12.5px", color: "#047857" }}>
+                      Your verification code is:{" "}
+                      <b style={{ fontSize: "16px", letterSpacing: "2px", color: "#065f46" }}>
+                        {devOtpBanner}
+                      </b>{" "}
+                      (Valid for 5 mins)
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {otpError && (
+                <div style={{ background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", padding: "12px 14px", borderRadius: "10px", fontSize: "13px", marginBottom: "16px" }}>
+                  ⚠️ {otpError}
+                </div>
+              )}
+
+              {otpSuccessMsg && !devOtpBanner && (
+                <div style={{ background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0", padding: "12px 14px", borderRadius: "10px", fontSize: "13px", marginBottom: "16px" }}>
+                  ✓ {otpSuccessMsg}
+                </div>
+              )}
+
+              {/* STEP 1: Enter Token # & Phone */}
+              {otpStep === 1 && (
+                <form onSubmit={handleSendCustomerOtp} className="cust-otp-form">
+                  <div className="cust-input-group">
+                    <label>Token Number</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 4 or B-104"
+                      value={tokenInput}
+                      onChange={(e) => setTokenInput(e.target.value)}
+                      required
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="cust-input-group">
+                    <label>Mobile Number (Provided at Counter)</label>
+                    <input
+                      type="tel"
+                      placeholder="e.g. 9876543210"
+                      value={phoneInput}
+                      onChange={(e) => setPhoneInput(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <button type="submit" className="cust-submit-btn" disabled={otpLoading}>
+                    {otpLoading ? "Checking Token Record..." : "Track Token 🚀"}
+                  </button>
+
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "14px", fontSize: "12.5px" }}>
+                    <Link to="/register" style={{ color: "#2563eb", textDecoration: "none", fontWeight: "700" }}>
+                      Create Customer Account ↗
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setCustomerAccessMode("login")}
+                      style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", textDecoration: "underline", fontSize: "12px" }}
+                    >
+                      Login with Password →
+                    </button>
+                  </div>
+                </form>
+              )}
 
           {/* STEP 2: Enter OTP */}
           {otpStep === 2 && (
@@ -442,6 +616,8 @@ export default function CustomerPortal() {
                 </button>
               </div>
             </form>
+          )}
+            </div>
           )}
         </div>
       </div>

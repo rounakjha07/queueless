@@ -4,7 +4,12 @@ import { Link, useNavigate } from "react-router-dom";
 function Login() {
     const navigate = useNavigate();
     const searchParams = new URLSearchParams(window.location.search);
-    const [loginTab, setLoginTab] = useState(() => searchParams.get("tab") === "customer" ? "customer" : "staff");
+    const [loginTab, setLoginTab] = useState(() => {
+        const t = searchParams.get("tab");
+        if (t === "staff" || t === "provider") return "staff";
+        if (t === "token" || t === "otp") return "token";
+        return "customer";
+    });
 
     // Staff / Manager login state
     const [showPassword, setShowPassword] = useState(false);
@@ -32,8 +37,8 @@ function Login() {
         }
     });
 
-    // 1. Staff / Manager Login
-    async function handleStaffLogin(e) {
+    // 1. Registered Email & Password Login (Customer, Manager, Staff)
+    async function handleEmailPasswordLogin(e) {
         e.preventDefault();
         setMessage("");
         setIsError(false);
@@ -48,7 +53,7 @@ function Login() {
                         "Content-Type": "application/json",
                     },
                     credentials: "include",
-                    body: JSON.stringify({ email, password }),
+                    body: JSON.stringify({ email: email.trim(), password }),
                 }
             );
 
@@ -64,6 +69,8 @@ function Login() {
 
             if (data.user.role === "customer") {
                 navigate("/customer", { replace: true });
+            } else if (data.user.role === "staff") {
+                navigate("/staff-portal", { replace: true });
             } else {
                 navigate("/dashboard", { replace: true });
             }
@@ -227,16 +234,16 @@ function Login() {
                             Choose your access type to proceed:
                         </p>
 
-                        {/* 2-Tab Switch: Customer Live Token vs Staff & Provider */}
+                        {/* 3-Tab Switch: Customer vs Token OTP vs Staff & Provider */}
                         <div
                             style={{
                                 display: "grid",
-                                gridTemplateColumns: "1fr 1fr",
-                                gap: "8px",
+                                gridTemplateColumns: "1fr 1fr 1fr",
+                                gap: "6px",
                                 background: "#f1f5f9",
                                 padding: "6px",
                                 borderRadius: "12px",
-                                marginBottom: "20px",
+                                marginBottom: "22px",
                             }}
                         >
                             <button
@@ -247,11 +254,11 @@ function Login() {
                                     setIsError(false);
                                 }}
                                 style={{
-                                    padding: "10px 8px",
+                                    padding: "9px 6px",
                                     border: "none",
                                     borderRadius: "8px",
                                     fontWeight: 700,
-                                    fontSize: "13px",
+                                    fontSize: "12px",
                                     cursor: "pointer",
                                     background: loginTab === "customer" ? "#ffffff" : "transparent",
                                     color: loginTab === "customer" ? "#1e293b" : "#64748b",
@@ -259,7 +266,30 @@ function Login() {
                                     transition: "all 0.2s ease",
                                 }}
                             >
-                                🎟️ Customer Token
+                                👤 Customer
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setLoginTab("token");
+                                    setMessage("");
+                                    setIsError(false);
+                                }}
+                                style={{
+                                    padding: "9px 6px",
+                                    border: "none",
+                                    borderRadius: "8px",
+                                    fontWeight: 700,
+                                    fontSize: "12px",
+                                    cursor: "pointer",
+                                    background: loginTab === "token" ? "#ffffff" : "transparent",
+                                    color: loginTab === "token" ? "#1e293b" : "#64748b",
+                                    boxShadow: loginTab === "token" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
+                                    transition: "all 0.2s ease",
+                                }}
+                            >
+                                🎟️ Token (OTP)
                             </button>
 
                             <button
@@ -270,11 +300,11 @@ function Login() {
                                     setIsError(false);
                                 }}
                                 style={{
-                                    padding: "10px 8px",
+                                    padding: "9px 6px",
                                     border: "none",
                                     borderRadius: "8px",
                                     fontWeight: 700,
-                                    fontSize: "13px",
+                                    fontSize: "12px",
                                     cursor: "pointer",
                                     background: loginTab === "staff" ? "#ffffff" : "transparent",
                                     color: loginTab === "staff" ? "#1e293b" : "#64748b",
@@ -282,13 +312,102 @@ function Login() {
                                     transition: "all 0.2s ease",
                                 }}
                             >
-                                🏢 Provider & Staff
+                                🏢 Provider / Staff
                             </button>
                         </div>
 
-                        {/* ================= TAB 1: CUSTOMER LIVE TOKEN OTP LOGIN ================= */}
+                        {/* ================= TAB 1: REGISTERED CUSTOMER LOGIN ================= */}
                         {loginTab === "customer" && (
+                            <form onSubmit={handleEmailPasswordLogin}>
+                                <div style={{ marginBottom: "16px", padding: "10px 14px", background: "#eff6ff", borderRadius: "10px", border: "1px solid #bfdbfe", fontSize: "12.5px", color: "#1e40af" }}>
+                                    👤 <b>Customer Account Login:</b> Enter your registered email and password to access your bookings and explore services.
+                                </div>
+
+                                <label htmlFor="cust-email">Email address</label>
+                                <input
+                                    id="cust-email"
+                                    type="email"
+                                    placeholder="you@example.com"
+                                    autoComplete="email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    required
+                                    autoFocus
+                                />
+
+                                <div className="auth-label-row">
+                                    <label htmlFor="cust-password">Password</label>
+                                </div>
+
+                                <div className="password-wrap">
+                                    <input
+                                        id="cust-password"
+                                        type={showPassword ? "text" : "password"}
+                                        placeholder="Enter your account password"
+                                        autoComplete="current-password"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        required
+                                    />
+
+                                    <button
+                                        className="password-toggle"
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        aria-label={showPassword ? "Hide password" : "Show password"}
+                                    >
+                                        {showPassword ? "Hide" : "Show"}
+                                    </button>
+                                </div>
+
+                                {message && (
+                                    <p
+                                        role="status"
+                                        style={{
+                                            color: isError ? "#dc2626" : "#16a34a",
+                                            marginTop: "12px",
+                                            fontSize: "13px",
+                                        }}
+                                    >
+                                        {message}
+                                    </p>
+                                )}
+
+                                <button
+                                    className="auth-primary-btn"
+                                    type="submit"
+                                    disabled={loading}
+                                    style={{ marginTop: "16px" }}
+                                >
+                                    {loading ? "Logging in..." : "Log in as Customer 🚀"}
+                                </button>
+
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "16px", fontSize: "12.5px" }}>
+                                    <Link to="/register" style={{ color: "#2563eb", fontWeight: "700", textDecoration: "none" }}>
+                                        Create Customer Account ↗
+                                    </Link>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setLoginTab("token");
+                                            setMessage("");
+                                            setIsError(false);
+                                        }}
+                                        style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", textDecoration: "underline", fontSize: "12.5px" }}
+                                    >
+                                        Walk-in Token (OTP) →
+                                    </button>
+                                </div>
+                            </form>
+                        )}
+
+                        {/* ================= TAB 2: WALK-IN TOKEN OTP LOGIN ================= */}
+                        {loginTab === "token" && (
                             <div>
+                                <div style={{ marginBottom: "16px", padding: "10px 14px", background: "#f8fafc", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "12.5px", color: "#475569" }}>
+                                    🎟️ <b>Walk-in Token Access:</b> Enter the Token Number and Mobile number given at the counter to track live wait time (No password needed).
+                                </div>
+
                                 {devOtpNotification && (
                                     <div
                                         style={{
@@ -361,6 +480,23 @@ function Login() {
                                         >
                                             {loading ? "Checking Token Record..." : "Track Token 🚀"}
                                         </button>
+
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "16px", fontSize: "12.5px" }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setLoginTab("customer");
+                                                    setMessage("");
+                                                    setIsError(false);
+                                                }}
+                                                style={{ background: "none", border: "none", color: "#2563eb", cursor: "pointer", fontWeight: "700" }}
+                                            >
+                                                ← Login with Password
+                                            </button>
+                                            <Link to="/register" style={{ color: "#64748b", textDecoration: "none" }}>
+                                                Register Account ↗
+                                            </Link>
+                                        </div>
                                     </form>
                                 ) : (
                                     <form onSubmit={handleVerifyCustomerOtp}>
@@ -449,9 +585,13 @@ function Login() {
                             </div>
                         )}
 
-                        {/* ================= TAB 2: STAFF & PROVIDER LOGIN ================= */}
+                        {/* ================= TAB 3: STAFF & PROVIDER LOGIN ================= */}
                         {loginTab === "staff" && (
-                            <form onSubmit={handleStaffLogin}>
+                            <form onSubmit={handleEmailPasswordLogin}>
+                                <div style={{ marginBottom: "16px", padding: "10px 14px", background: "#f8fafc", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "12.5px", color: "#475569" }}>
+                                    🏢 <b>Control Center Login:</b> Sign in to manage counter queues, call tokens, and view center analytics.
+                                </div>
+
                                 <label htmlFor="login-email">Email address</label>
                                 <input
                                     id="login-email"
@@ -494,6 +634,7 @@ function Login() {
                                         style={{
                                             color: isError ? "#dc2626" : "#16a34a",
                                             marginTop: "12px",
+                                            fontSize: "13px",
                                         }}
                                     >
                                         {message}
@@ -504,9 +645,18 @@ function Login() {
                                     className="auth-primary-btn"
                                     type="submit"
                                     disabled={loading}
+                                    style={{ marginTop: "16px" }}
                                 >
-                                    {loading ? "Logging in..." : "Log in"} <span>→</span>
+                                    {loading ? "Logging in..." : "Log in to Control Center 🏢"}
                                 </button>
+
+                                <div className="auth-divider">
+                                    <span>SERVICE PROVIDER ONBOARDING</span>
+                                </div>
+
+                                <Link className="auth-secondary-btn" to="/register">
+                                    Register Service Center or Staff Account <span>↗</span>
+                                </Link>
                             </form>
                         )}
 
