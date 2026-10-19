@@ -833,7 +833,9 @@ function Dashboard() {
                                 <button className="modal-close" onClick={() => setShowKeyModal(false)}>✕</button>
                             </div>
                             <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 16px", lineHeight: "1.5" }}>
-                                Enter your <b>OpenAI API Key</b> (<code>sk-proj-...</code>) or <b>Google Gemini Key</b> (<code>AIzaSy...</code>) below. QueueCopilot will use live generative AI to answer any question, execute tasks, and optimize queues.
+                                Connect your <b>Google Gemini API Key</b> (starts with <code>AQ...</code> or <code>AIzaSy...</code>) or <b>OpenAI API Key</b> (<code>sk-...</code>).
+                                <br />
+                                <span style={{ color: "#10b981", fontWeight: "600" }}>✓ Server default: Google Gemini 3.5 Flash is already active on the backend!</span>
                             </p>
                             <form
                                 onSubmit={(e) => {
@@ -842,20 +844,21 @@ function Dashboard() {
                                     localStorage.setItem("queueless-openai-key", clean);
                                     setOpenAiKey(clean);
                                     setShowKeyModal(false);
-                                    alert(clean ? "Live AI Key saved! Active AI is now powering your assistant." : "API key cleared. Built-in engine will be used.");
+                                    const providerName = clean.startsWith("sk-") ? "OpenAI ChatGPT" : "Google Gemini Flash";
+                                    alert(clean ? `${providerName} key saved! Live AI is now powering your assistant.` : "Custom key cleared. Default live Gemini engine will be used.");
                                 }}
                                 className="modal-form-grid"
                             >
                                 <input
                                     type="password"
-                                    placeholder="Paste sk-proj-... (OpenAI) or AIzaSy... (Gemini)"
+                                    placeholder="Paste AQ... / AIza... (Gemini) or sk-... (OpenAI)"
                                     value={keyInput}
                                     onChange={(e) => setKeyInput(e.target.value)}
                                     required={!openAiKey}
                                 />
                                 <div style={{ display: "flex", gap: "10px" }}>
                                     <button type="submit" className="submit-token-btn" style={{ flex: 1 }}>
-                                        Save & Activate ChatGPT 🚀
+                                        Save & Activate Live AI ⚡
                                     </button>
                                     {openAiKey && (
                                         <button
@@ -1449,9 +1452,9 @@ function Dashboard() {
                                     <button
                                         className="ai-key-config-btn"
                                         onClick={() => setShowKeyModal(true)}
-                                        title="Configure ChatGPT / OpenAI API Key"
+                                        title="Configure Live AI (Gemini or ChatGPT) API Key"
                                     >
-                                        🔑 {openAiKey ? "ChatGPT (GPT-4o-mini) Connected ✓" : "Connect ChatGPT API"}
+                                        🔑 {openAiKey ? (openAiKey.startsWith("sk-") ? "ChatGPT (GPT-4o) Connected ✓" : "Gemini 3.5 Flash Connected ✓") : "Live AI Active ⚡ (Gemini 3.5)"}
                                     </button>
                                     <span className="ai-intelligence-pill">
                                         <span className="ai-online-dot" /> Autonomous Agent Active

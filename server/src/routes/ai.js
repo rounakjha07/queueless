@@ -175,13 +175,20 @@ Current Service Center Context:
 - User Role: ${req.user.role}
 `;
 
-    const activeApiKey = (req.headers["x-openai-key"] || req.body.apiKey || process.env.OPENAI_API_KEY || "").trim();
+    const activeApiKey = (
+      req.headers["x-openai-key"] ||
+      req.headers["x-gemini-key"] ||
+      req.body.apiKey ||
+      process.env.GEMINI_API_KEY ||
+      process.env.OPENAI_API_KEY ||
+      ""
+    ).trim();
 
-    // 1. If Gemini API key is provided (starts with AIza)
-    if (activeApiKey.startsWith("AIza")) {
+    // 1. If Gemini API key is provided (starts with AQ. or AIza or length > 20 and not sk-)
+    if (activeApiKey.startsWith("AQ.") || activeApiKey.startsWith("AIza") || (!activeApiKey.startsWith("sk-") && activeApiKey.length > 25)) {
       try {
         const geminiRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${activeApiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${activeApiKey}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -190,7 +197,21 @@ Current Service Center Context:
                 {
                   parts: [
                     {
-                      text: `You are QueueCopilot AI for QueueLess. Context:\n${contextSummary}\n\nInstructions: Answer the user's question clearly in the language asked. If asking to call someone, end with: ACTION: {"type": "call_next", "serviceName": "<ServiceName>", "label": "Call Next"}\nUser Query: ${message}`,
+                      text: `You are QueueCopilot AI, an intelligent, helpful queue optimization assistant for QueueLess. You analyze queue bottlenecks, advise service managers and counter staff, automate customer call tasks, and answer ANY general, technical, or operational question with high intelligence and professionalism.
+Answer questions in the language the user asked (English, Hindi, or Hinglish). Keep responses crisp, clear, and actionable.
+
+${contextSummary}
+
+Instructions for Action Triggering:
+If the user asks to call the next customer, serve someone, or resolve a bottleneck, include an ACTION line at the end of your response in this exact format:
+ACTION: {"type": "call_next", "serviceName": "<ServiceName>", "label": "Call Next in <ServiceName> ⚡"}
+If the user asks to mark current customer done:
+ACTION: {"type": "complete_token", "tokenId": "<TokenId>", "label": "Mark Completed ✓"}
+If the user asks to load demo data:
+ACTION: {"type": "seed_demo", "label": "Load Demo Dataset 🚀"}
+Do not output ACTION if no specific action is needed.
+
+User Question/Command: ${message}`,
                     },
                   ],
                 },
@@ -212,11 +233,14 @@ Current Service Center Context:
               console.warn("Failed to parse Gemini ACTION json:", e);
             }
           }
+          if (!action && waiting.length > 0 && (message.toLowerCase().includes("call") || message.toLowerCase().includes("next") || message.toLowerCase().includes("bula"))) {
+            action = { type: "call_next", serviceName: waiting[0].serviceName, label: `Call #${waiting[0].tokenNumber} Now` };
+          }
           return res.json({
             success: true,
             reply: rawText,
             action,
-            provider: "Google Gemini 1.5 Flash (Live AI)",
+            provider: "Google Gemini 3.5 Flash (Live AI ⚡)",
           });
         } else if (geminiData.error) {
           return res.json({
@@ -234,8 +258,8 @@ Current Service Center Context:
       }
     }
 
-    // 2. If OpenAI ChatGPT API key is provided (starts with sk- or configured in env)
-    if (activeApiKey) {
+    // 2. If OpenAI ChatGPT API key is provided (starts with sk-)
+    if (activeApiKey.startsWith("sk-")) {
       try {
         const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
           method: "POST",
