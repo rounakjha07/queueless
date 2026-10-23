@@ -297,123 +297,55 @@ function Register() {
                         </p>
 
                         {/* Customer Quick Token Access Notice */}
-                        <div
-                            style={{
-                                background: "#f0fdf4",
-                                border: "1px solid #bbf7d0",
-                                borderRadius: "12px",
-                                padding: "12px 16px",
-                                marginBottom: "18px",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                gap: "10px",
-                                flexWrap: "wrap",
-                            }}
-                        >
-                            <span style={{ fontSize: "12.5px", color: "#166534" }}>
-                                🎟️ Have a token slip from a counter? You can track it directly without creating an account!
+                        <div className="auth-quick-token-banner">
+                            <span className="auth-quick-token-text">
+                                🎟️ Have a token slip from a counter? Track live wait time directly!
                             </span>
-                            <Link
-                                to="/customer"
-                                style={{
-                                    background: "#16a34a",
-                                    color: "#ffffff",
-                                    padding: "6px 12px",
-                                    borderRadius: "8px",
-                                    fontSize: "12px",
-                                    fontWeight: "700",
-                                    textDecoration: "none",
-                                    whiteSpace: "nowrap",
-                                }}
-                            >
+                            <Link to="/customer" className="auth-quick-token-btn">
                                 Track Token ↗
                             </Link>
                         </div>
 
-                        {/* Role Selector Tabs (3 Roles) */}
-                        <div
-                            style={{
-                                display: "grid",
-                                gridTemplateColumns: "repeat(3, 1fr)",
-                                gap: "8px",
-                                background: "#f1f5f9",
-                                padding: "6px",
-                                borderRadius: "12px",
-                                marginBottom: "22px",
-                            }}
-                        >
+                        {/* Role Selector Tabs (3 Roles - Mobile Responsive) */}
+                        <div className="auth-role-tabs" role="tablist" aria-label="Account Role">
                             <button
                                 type="button"
+                                role="tab"
+                                aria-selected={role === "customer"}
                                 onClick={() => handleRoleChange("customer")}
-                                style={{
-                                    padding: "10px 6px",
-                                    border: "none",
-                                    borderRadius: "8px",
-                                    fontWeight: 600,
-                                    fontSize: "13px",
-                                    cursor: "pointer",
-                                    background: role === "customer" ? "#ffffff" : "transparent",
-                                    color: role === "customer" ? "#1e293b" : "#64748b",
-                                    boxShadow: role === "customer" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
-                                    transition: "all 0.2s ease",
-                                }}
+                                className={`auth-role-btn ${role === "customer" ? "active" : ""}`}
                             >
-                                👤 Customer
+                                <span>👤</span>
+                                <span>Customer</span>
                             </button>
 
                             <button
                                 type="button"
+                                role="tab"
+                                aria-selected={role === "manager"}
                                 onClick={() => handleRoleChange("manager")}
-                                style={{
-                                    padding: "10px 6px",
-                                    border: "none",
-                                    borderRadius: "8px",
-                                    fontWeight: 600,
-                                    fontSize: "13px",
-                                    cursor: "pointer",
-                                    background: role === "manager" ? "#ffffff" : "transparent",
-                                    color: role === "manager" ? "#1e293b" : "#64748b",
-                                    boxShadow: role === "manager" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
-                                    transition: "all 0.2s ease",
-                                }}
+                                className={`auth-role-btn ${role === "manager" ? "active" : ""}`}
                             >
-                                🏢 Provider Head
+                                <span>🏢</span>
+                                <span className="role-text-full">Provider Head</span>
+                                <span className="role-text-short">Provider</span>
                             </button>
 
                             <button
                                 type="button"
+                                role="tab"
+                                aria-selected={role === "staff"}
                                 onClick={() => handleRoleChange("staff")}
-                                style={{
-                                    padding: "10px 6px",
-                                    border: "none",
-                                    borderRadius: "8px",
-                                    fontWeight: 600,
-                                    fontSize: "13px",
-                                    cursor: "pointer",
-                                    background: role === "staff" ? "#ffffff" : "transparent",
-                                    color: role === "staff" ? "#1e293b" : "#64748b",
-                                    boxShadow: role === "staff" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
-                                    transition: "all 0.2s ease",
-                                }}
+                                className={`auth-role-btn ${role === "staff" ? "active" : ""}`}
                             >
-                                🧑‍💼 Staff Member
+                                <span>🧑‍💼</span>
+                                <span className="role-text-full">Staff Member</span>
+                                <span className="role-text-short">Staff</span>
                             </button>
                         </div>
 
                         {role === "staff" && (
-                            <div
-                                style={{
-                                    background: "#eff6ff",
-                                    border: "1px solid #bfdbfe",
-                                    color: "#1e40af",
-                                    padding: "12px 14px",
-                                    borderRadius: "10px",
-                                    fontSize: "13px",
-                                    marginBottom: "18px",
-                                    lineHeight: "1.4",
-                                }}
-                            >
+                            <div className="auth-staff-notice">
                                 ℹ️ <strong>Staff Registration:</strong> You need an invite code generated by your Service Provider Head.
                             </div>
                         )}
@@ -445,34 +377,23 @@ function Register() {
                                 required
                             />
 
-                            {/* Customer Phone + OTP Verification */}
+                            {/* Customer Phone + OTP Verification (Fully Mobile Responsive) */}
                             {role === "customer" && (
-                                <div style={{ marginBottom: "18px" }}>
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                                        <label htmlFor="register-phone" style={{ margin: 0, fontWeight: "600" }}>
+                                <div className="auth-phone-section">
+                                    <div className="auth-phone-label-row">
+                                        <label htmlFor="register-phone">
                                             Mobile Number <span style={{ color: "#dc2626" }}>*</span>
                                         </label>
                                         {otpVerified && (
-                                            <span style={{ fontSize: "12.5px", color: "#16a34a", fontWeight: "700" }}>
+                                            <span className="auth-verified-badge">
                                                 ✓ Verified
                                             </span>
                                         )}
                                     </div>
 
-                                    <div style={{ display: "flex", gap: "8px" }}>
-                                        <div style={{ position: "relative", flex: 1 }}>
-                                            <span style={{
-                                                position: "absolute",
-                                                left: "12px",
-                                                top: "50%",
-                                                transform: "translateY(-50%)",
-                                                fontSize: "13px",
-                                                color: "#64748b",
-                                                fontWeight: "600",
-                                                pointerEvents: "none",
-                                            }}>
-                                                +91
-                                            </span>
+                                    <div className="auth-phone-wrap">
+                                        <div className="auth-phone-input-box">
+                                            <span className="auth-phone-prefix">+91</span>
                                             <input
                                                 id="register-phone"
                                                 type="tel"
@@ -490,13 +411,7 @@ function Register() {
                                                         setDevOtpNotification("");
                                                     }
                                                 }}
-                                                style={{
-                                                    paddingLeft: "44px",
-                                                    letterSpacing: "1px",
-                                                    fontWeight: "600",
-                                                    background: otpVerified ? "#f0fdf4" : undefined,
-                                                    borderColor: otpVerified ? "#86efac" : undefined,
-                                                }}
+                                                className={otpVerified ? "input-verified" : ""}
                                                 required
                                             />
                                         </div>
@@ -506,18 +421,7 @@ function Register() {
                                                 type="button"
                                                 onClick={handleSendOtp}
                                                 disabled={phone.length !== 10 || otpLoading || countdown > 0}
-                                                style={{
-                                                    padding: "0 14px",
-                                                    borderRadius: "10px",
-                                                    border: "1px solid #cbd5e1",
-                                                    background: phone.length === 10 && countdown === 0 ? "#2563eb" : "#f1f5f9",
-                                                    color: phone.length === 10 && countdown === 0 ? "#ffffff" : "#94a3b8",
-                                                    fontWeight: "600",
-                                                    fontSize: "12.5px",
-                                                    cursor: phone.length === 10 && countdown === 0 ? "pointer" : "not-allowed",
-                                                    whiteSpace: "nowrap",
-                                                    transition: "all 0.2s ease",
-                                                }}
+                                                className={`auth-otp-btn ${phone.length === 10 && countdown === 0 && !otpLoading ? "active" : ""}`}
                                             >
                                                 {otpLoading
                                                     ? "Sending..."
@@ -537,15 +441,7 @@ function Register() {
                                                     setDevOtpNotification("");
                                                     setCountdown(0);
                                                 }}
-                                                style={{
-                                                    padding: "0 12px",
-                                                    borderRadius: "10px",
-                                                    border: "1px solid #e2e8f0",
-                                                    background: "#ffffff",
-                                                    color: "#64748b",
-                                                    fontSize: "12px",
-                                                    cursor: "pointer",
-                                                }}
+                                                className="auth-change-phone-btn"
                                             >
                                                 Change
                                             </button>
@@ -554,40 +450,24 @@ function Register() {
 
                                     {/* Dev OTP preview banner */}
                                     {devOtpNotification && !otpVerified && (
-                                        <div
-                                            style={{
-                                                background: "#ecfdf5",
-                                                border: "1px solid #6ee7b7",
-                                                borderRadius: "10px",
-                                                padding: "10px 14px",
-                                                marginTop: "10px",
-                                                display: "flex",
-                                                alignItems: "center",
-                                                gap: "10px",
-                                            }}
-                                        >
-                                            <span style={{ fontSize: "18px" }}>📱</span>
-                                            <div style={{ flex: 1 }}>
-                                                <div style={{ fontSize: "12px", color: "#065f46", fontWeight: "600" }}>
-                                                    SMS Gateway: Verification OTP
-                                                </div>
-                                                <div style={{ fontSize: "12px", color: "#047857" }}>
-                                                    Your verification code is:{" "}
-                                                    <b style={{ fontSize: "15px", letterSpacing: "2px", color: "#065f46" }}>
-                                                        {devOtpNotification}
-                                                    </b>
-                                                </div>
+                                        <div className="auth-sms-preview-card">
+                                            <span className="auth-sms-icon">📱</span>
+                                            <div className="auth-sms-body">
+                                                <strong className="auth-sms-title">SMS Gateway: Verification OTP</strong>
+                                                <span className="auth-sms-code">
+                                                    Your code is: <b>{devOtpNotification}</b>
+                                                </span>
                                             </div>
                                         </div>
                                     )}
 
                                     {/* OTP Input section */}
                                     {otpSent && !otpVerified && (
-                                        <div style={{ marginTop: "12px" }}>
-                                            <label htmlFor="register-otp" style={{ fontSize: "12.5px", color: "#475569" }}>
+                                        <div className="auth-otp-input-section">
+                                            <label htmlFor="register-otp">
                                                 Enter 6-Digit Verification Code
                                             </label>
-                                            <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+                                            <div className="auth-otp-row">
                                                 <input
                                                     id="register-otp"
                                                     type="text"
@@ -599,35 +479,19 @@ function Register() {
                                                         const val = e.target.value.replace(/\D/g, "").slice(0, 6);
                                                         setOtpCode(val);
                                                     }}
-                                                    style={{
-                                                        letterSpacing: "4px",
-                                                        fontWeight: "700",
-                                                        fontSize: "16px",
-                                                        textAlign: "center",
-                                                        flex: 1,
-                                                    }}
+                                                    className="auth-otp-input"
                                                     autoFocus
                                                 />
                                                 <button
                                                     type="button"
                                                     onClick={handleVerifyOtp}
                                                     disabled={otpCode.length !== 6 || otpLoading}
-                                                    style={{
-                                                        padding: "0 18px",
-                                                        borderRadius: "10px",
-                                                        border: "none",
-                                                        background: otpCode.length === 6 ? "#16a34a" : "#cbd5e1",
-                                                        color: "#ffffff",
-                                                        fontWeight: "700",
-                                                        fontSize: "13px",
-                                                        cursor: otpCode.length === 6 ? "pointer" : "not-allowed",
-                                                        transition: "all 0.2s ease",
-                                                    }}
+                                                    className={`auth-verify-btn ${otpCode.length === 6 && !otpLoading ? "active" : ""}`}
                                                 >
                                                     {otpLoading ? "Verifying..." : "Verify OTP ✓"}
                                                 </button>
                                             </div>
-                                            <span style={{ fontSize: "11px", color: "#64748b", marginTop: "4px", display: "block" }}>
+                                            <span className="auth-otp-note">
                                                 Code valid for 5 minutes. One mobile number can only be used by one customer.
                                             </span>
                                         </div>
@@ -740,7 +604,7 @@ function Register() {
                                 type="submit"
                                 disabled={loading || (role === "customer" && !otpVerified)}
                                 style={{
-                                    opacity: role === "customer" && !otpVerified ? 0.7 : 1,
+                                    opacity: role === "customer" && !otpVerified ? 0.65 : 1,
                                     cursor: role === "customer" && !otpVerified ? "not-allowed" : "pointer",
                                 }}
                             >
