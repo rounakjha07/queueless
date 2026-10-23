@@ -4,6 +4,7 @@ import Queue from "../models/queue.js";
 import Service from "../models/service.js";
 import User from "../models/user.js";
 import { protect } from "../middleware/authMiddleware.js";
+import jwt from "jsonwebtoken";
 
 const router = express.Router();
 
@@ -205,7 +206,8 @@ router.get("/explore", async (req, res) => {
   try {
     const { startOfDay, endOfDay } = getTodayISTBoundaries();
 
-    const services = await Service.find().populate(
+    const filter = req.query.provider ? { createdBy: req.query.provider } : {};
+    const services = await Service.find(filter).populate(
       "createdBy",
       "name businessName email address city phone googleMapsUrl"
     );
@@ -267,6 +269,130 @@ router.get("/explore", async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to load services.",
+    });
+  }
+});
+
+// 3.1 Live Waiting Room TV Display Board (Provider Isolated)
+router.get("/board", async (req, res) => {
+  try {
+    const { startOfDay, endOfDay } = getTodayISTBoundaries();
+    const { provider } = req.query;
+
+    let targetManagerId = provider || null;
+
+    // If no provider query was passed, check auth cookie if user is logged in
+    if (!targetManagerId && req.cookies?.token && process.env.JWT_SECRET) {
+      try {
+        const decoded = jwt.verify(req.cookies.token, process.env.JWT_SECRET);
+        if (decoded?.role === "manager") {
+          targetManagerId = decoded.userId;
+        } else if (decoded?.role === "staff") {
+          const staffUser = await User.findById(decoded.userId);
+          targetManagerId = staffUser?.managerId;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // If still no provider ID, return all available providers so TV screen can display a selector
+    if (!targetManagerId) {
+      const managers = await User.find({ role: "manager" }).select("name businessName address city phone");
+      return res.json({
+        success: true,
+        isProviderSelected: false,
+        providers: managers.map((m) => ({
+          id: m._id,
+          name: m.businessName || m.name,
+          address: m.address || "Main Branch",
+          city: m.city || "",
+        })),
+        services: [],
+        activeServing: [],
+      });
+    }
+
+    const providerUser = await User.findById(targetManagerId).select(
+      "name businessName email address city phone googleMapsUrl"
+    );
+
+    if (!providerUser) {
+      return res.status(404).json({
+        success: false,
+        message: "Service Provider Center not found.",
+      });
+    }
+
+    const providerName = providerUser.businessName || providerUser.name || "Service Center";
+
+    // 1. Fetch only services created by this provider
+    const services = await Service.find({ createdBy: targetManagerId });
+
+    const serviceList = await Promise.all(
+      services.map(async (srv) => {
+        const waitingCount = await Queue.countDocuments({
+          createdBy: targetManagerId,
+          serviceName: srv.name,
+          status: "waiting",
+          createdAt: { $gte: startOfDay, $lt: endOfDay },
+        });
+
+        const servingNow = await Queue.findOne({
+          createdBy: targetManagerId,
+          serviceName: srv.name,
+          status: "serving",
+          createdAt: { $gte: startOfDay, $lt: endOfDay },
+        }).select("tokenNumber customerName counterNumber calledAt");
+
+        return {
+          id: srv._id,
+          name: srv.name,
+          category: srv.category || "General",
+          waitingCount,
+          estimatedWaitMinutes: waitingCount === 0 ? (servingNow ? 2 : 0) : waitingCount * (srv.estimatedServiceMinutes || 5),
+          currentlyServingToken: servingNow ? servingNow.tokenNumber : null,
+          currentlyServingCounter: servingNow ? servingNow.counterNumber : null,
+          calledAt: servingNow?.calledAt || null,
+        };
+      })
+    );
+
+    // 2. Fetch all active serving tokens for this provider today
+    const servingQueues = await Queue.find({
+      createdBy: targetManagerId,
+      status: "serving",
+      createdAt: { $gte: startOfDay, $lt: endOfDay },
+    }).select("tokenNumber customerName counterNumber serviceName calledAt updatedAt");
+
+    const activeServing = servingQueues.map((item) => ({
+      id: item._id,
+      tokenNumber: item.tokenNumber,
+      customerName: item.customerName,
+      counterNumber: item.counterNumber || "Counter 1",
+      serviceName: item.serviceName,
+      calledAt: item.calledAt || item.updatedAt,
+      providerName,
+    }));
+
+    return res.json({
+      success: true,
+      isProviderSelected: true,
+      provider: {
+        id: providerUser._id,
+        name: providerName,
+        address: providerUser.address || "",
+        city: providerUser.city || "",
+        phone: providerUser.phone || "",
+      },
+      services: serviceList,
+      activeServing,
+    });
+  } catch (error) {
+    console.error("TV Display Board error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to load TV display board data.",
     });
   }
 });

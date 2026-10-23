@@ -853,7 +853,7 @@ function Dashboard() {
                     <div className="qd-header-right">
                         {/* Waiting Room TV Display Board Link */}
                         <a
-                            href="/display"
+                            href={`/display?provider=${user.role === "staff" ? user.managerId : (user._id || user.id)}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="qd-tv-link-btn"

@@ -35,6 +35,36 @@ router.post("/invite", protect, async (req, res) => {
       });
     }
 
+    const cleanEmail = staffEmail?.trim()?.toLowerCase() || "";
+
+    // If an existing registered staff member has this email, immediately reassign their service
+    if (cleanEmail) {
+      const existingStaff = await User.findOne({
+        email: cleanEmail,
+        managerId: req.user.id,
+        role: "staff",
+      });
+
+      if (existingStaff) {
+        const oldService = existingStaff.assignedService;
+        existingStaff.assignedService = serviceName.trim();
+        if (counterNumber && typeof counterNumber === "string" && counterNumber.trim()) {
+          existingStaff.counterNumber = counterNumber.trim();
+        }
+        if (staffName && typeof staffName === "string" && staffName.trim()) {
+          existingStaff.name = staffName.trim();
+        }
+        await existingStaff.save();
+
+        return res.status(200).json({
+          success: true,
+          reassigned: true,
+          message: `Staff member "${existingStaff.name}" is already registered! Their service was successfully changed from "${oldService}" to "${existingStaff.assignedService}" (${existingStaff.counterNumber || "Counter 1"}).`,
+          staff: existingStaff,
+        });
+      }
+    }
+
     let code = generateStaffCode();
     let existing = await StaffInvite.findOne({ code });
     while (existing) {
