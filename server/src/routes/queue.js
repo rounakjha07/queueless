@@ -21,9 +21,10 @@ function getTodayISTBoundaries() {
   return { startOfDay, endOfDay };
 }
 
-// 1. Get all queue entries (Role-aware: Manager, Staff, Customer)
+// 1. Get all queue entries (Role-aware: Manager, Staff, Customer) with real-time wait telemetry
 router.get("/", protect, async (req, res) => {
   try {
+    const { startOfDay, endOfDay } = getTodayISTBoundaries();
     let query = {};
 
     if (req.user.role === "manager") {
@@ -45,10 +46,48 @@ router.get("/", protect, async (req, res) => {
     }
 
     const queues = await Queue.find(query).sort({ createdAt: -1 });
+    const now = Date.now();
+
+    const enrichedQueues = await Promise.all(
+      queues.map(async (item) => {
+        const itemObj = item.toObject();
+        const createdMs = new Date(item.createdAt).getTime();
+        const elapsedWaitMinutes = Math.max(0, Math.floor((now - createdMs) / 60000));
+        const elapsedWaitSeconds = Math.max(0, Math.floor((now - createdMs) / 1000));
+
+        let dynamicWaitMinutes = item.estimatedWaitMinutes || 0;
+        if (item.status === "waiting") {
+          const aheadCount = await Queue.countDocuments({
+            createdBy: item.createdBy,
+            serviceName: item.serviceName,
+            status: "waiting",
+            tokenNumber: { $lt: item.tokenNumber },
+            createdAt: { $gte: startOfDay, $lt: endOfDay },
+          });
+          dynamicWaitMinutes = aheadCount === 0 ? 2 : Math.max(2, aheadCount * 5);
+          itemObj.peopleAhead = aheadCount;
+        } else if (item.status === "serving") {
+          dynamicWaitMinutes = 0;
+          const calledMs = new Date(item.calledAt || item.updatedAt).getTime();
+          itemObj.servingDurationMinutes = Math.max(0, Math.floor((now - calledMs) / 60000));
+          itemObj.servingDurationSeconds = Math.max(0, Math.floor((now - calledMs) / 1000));
+        } else if (item.status === "completed") {
+          dynamicWaitMinutes = 0;
+          const endMs = new Date(item.completedAt || item.updatedAt).getTime();
+          itemObj.totalWaitMinutes = Math.max(1, Math.round((endMs - createdMs) / 60000));
+        }
+
+        itemObj.elapsedWaitMinutes = elapsedWaitMinutes;
+        itemObj.elapsedWaitSeconds = elapsedWaitSeconds;
+        itemObj.dynamicWaitMinutes = dynamicWaitMinutes;
+        return itemObj;
+      })
+    );
 
     return res.json({
       success: true,
-      queues,
+      queues: enrichedQueues,
+      serverTime: now,
     });
   } catch (error) {
     console.error("Fetch queues error:", error);
@@ -59,7 +98,7 @@ router.get("/", protect, async (req, res) => {
   }
 });
 
-// 2. Get queue statistics for the logged-in manager or staff
+// 2. Get queue statistics for the logged-in manager or staff with accurate live average wait times
 router.get("/stats", protect, async (req, res) => {
   try {
     const { startOfDay, endOfDay } = getTodayISTBoundaries();
@@ -93,19 +132,49 @@ router.get("/stats", protect, async (req, res) => {
       const completed = queues.filter((item) => item.status === "completed").length;
       const cancelled = queues.filter((item) => item.status === "cancelled").length;
 
-      const activeQueues = queues.filter(
-        (item) => item.status === "waiting" || item.status === "serving"
+      // Calculate actual wait times of served/completed customers
+      const servedQueues = queues.filter(
+        (item) => (item.status === "completed" || item.status === "serving") && (item.calledAt || item.completedAt || item.updatedAt)
       );
 
+      let waitTimeSamples = [];
+
+      servedQueues.forEach((item) => {
+        const start = new Date(item.createdAt).getTime();
+        let diffMinutes = 0;
+        if (item.calledAt) {
+          diffMinutes = Math.max(1, Math.round((new Date(item.calledAt).getTime() - start) / 60000));
+        } else if (item.completedAt) {
+          diffMinutes = Math.max(1, Math.round((new Date(item.completedAt).getTime() - start) / 60000));
+        } else if (item.estimatedWaitMinutes && item.estimatedWaitMinutes > 0) {
+          diffMinutes = item.estimatedWaitMinutes;
+        } else if (item.updatedAt) {
+          diffMinutes = Math.max(1, Math.round((new Date(item.updatedAt).getTime() - start) / 60000));
+        }
+        if (diffMinutes > 0 && diffMinutes < 1440) {
+          waitTimeSamples.push(diffMinutes);
+        }
+      });
+
+      // If no served customers yet, compute from current waiting elapsed times
+      if (waitTimeSamples.length === 0) {
+        const now = Date.now();
+        const waitingQueues = queues.filter((item) => item.status === "waiting");
+        waitingQueues.forEach((item) => {
+          const start = new Date(item.createdAt).getTime();
+          const elapsed = Math.max(1, Math.round((now - start) / 60000));
+          if (elapsed > 0 && elapsed < 1440) {
+            waitTimeSamples.push(elapsed);
+          } else if (item.estimatedWaitMinutes && item.estimatedWaitMinutes > 0) {
+            waitTimeSamples.push(item.estimatedWaitMinutes);
+          }
+        });
+      }
+
       const averageWaitTime =
-        activeQueues.length > 0
-          ? Math.round(
-              activeQueues.reduce(
-                (sum, item) => sum + (item.estimatedWaitMinutes || 0),
-                0
-              ) / activeQueues.length
-            )
-          : 0;
+        waitTimeSamples.length > 0
+          ? Math.round(waitTimeSamples.reduce((sum, val) => sum + val, 0) / waitTimeSamples.length)
+          : (waiting > 0 ? 5 : 0);
 
       return {
         totalCustomers: queues.length,
@@ -182,7 +251,7 @@ router.get("/explore", async (req, res) => {
           providerPhone: srv.createdBy?.phone || "",
           navigationUrl,
           waitingCount,
-          estimatedWaitMinutes: waitingCount * (srv.estimatedServiceMinutes || 5),
+          estimatedWaitMinutes: waitingCount === 0 ? (servingNow ? 2 : 0) : waitingCount * (srv.estimatedServiceMinutes || 5),
           currentlyServingToken: servingNow ? servingNow.tokenNumber : null,
           currentlyServingCounter: servingNow ? servingNow.counterNumber : null,
         };
@@ -356,9 +425,20 @@ router.get("/track-public", async (req, res) => {
     const isCancelled = token.status === "cancelled";
     const isWaiting = token.status === "waiting";
 
+    const nowMs = Date.now();
+    const createdMs = new Date(token.createdAt).getTime();
+    const elapsedSeconds = Math.max(0, Math.floor((nowMs - createdMs) / 1000));
+    const servingSeconds = token.calledAt ? Math.max(0, Math.floor((nowMs - new Date(token.calledAt).getTime()) / 1000)) : 0;
+
+    let dynamicWaitMinutes = 0;
+    if (isWaiting) {
+      dynamicWaitMinutes = peopleAhead === 0 ? 2 : Math.max(2, peopleAhead * 5);
+    }
+
     return res.json({
       success: true,
       hasActiveToken: isWaiting || isServing,
+      serverTime: nowMs,
       token: {
         id: token._id,
         tokenNumber: token.tokenNumber,
@@ -368,9 +448,13 @@ router.get("/track-public", async (req, res) => {
         customerName: token.customerName,
         customerPhone: token.customerPhone,
         peopleAhead,
-        estimatedWaitMinutes: isServing ? 0 : Math.max(peopleAhead * 5, 2),
+        estimatedWaitMinutes: dynamicWaitMinutes,
+        elapsedSeconds,
+        servingSeconds,
         counterNumber: token.servedBy?.counterNumber || token.counterNumber || null,
         staffName: token.servedBy?.name || null,
+        calledAt: token.calledAt,
+        completedAt: token.completedAt,
         provider: {
           id: token.createdBy?._id,
           name: token.createdBy?.name || "Service Center",
@@ -508,8 +592,15 @@ router.get("/customer-live-status", protect, async (req, res) => {
     // Dynamic wait minutes calculation
     let estimatedWaitMinutes = 0;
     if (token.status === "waiting") {
-      estimatedWaitMinutes = peopleAhead === 0 ? 2 : peopleAhead * 5;
+      estimatedWaitMinutes = peopleAhead === 0 ? 2 : Math.max(2, peopleAhead * 5);
+    } else if (token.status === "serving") {
+      estimatedWaitMinutes = 0;
     }
+
+    const nowMs = Date.now();
+    const createdMs = new Date(token.createdAt).getTime();
+    const elapsedSeconds = Math.max(0, Math.floor((nowMs - createdMs) / 1000));
+    const servingSeconds = token.calledAt ? Math.max(0, Math.floor((nowMs - new Date(token.calledAt).getTime()) / 1000)) : 0;
 
     let counterNumber = token.counterNumber || null;
     let staffName = token.servedBy?.name || null;
@@ -523,6 +614,7 @@ router.get("/customer-live-status", protect, async (req, res) => {
     return res.json({
       success: true,
       hasActiveToken: true,
+      serverTime: nowMs,
       token: {
         id: token._id,
         tokenNumber: token.tokenNumber,
@@ -533,6 +625,8 @@ router.get("/customer-live-status", protect, async (req, res) => {
         status: token.status,
         peopleAhead,
         estimatedWaitMinutes,
+        elapsedSeconds,
+        servingSeconds,
         counterNumber,
         staffName,
         calledAt: token.calledAt,

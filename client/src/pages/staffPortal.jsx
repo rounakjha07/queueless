@@ -64,7 +64,7 @@ export default function StaffPortal() {
   useEffect(() => {
     if (!user) return;
     fetchCounterStatus();
-    const interval = setInterval(fetchCounterStatus, 5000);
+    const interval = setInterval(fetchCounterStatus, 2500);
     return () => clearInterval(interval);
   }, [user]);
 

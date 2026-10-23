@@ -61,9 +61,29 @@ router.get("/insights", protect, async (req, res) => {
       role: "staff",
     });
 
-    const avgWait = waiting.length > 0
-      ? Math.round(waiting.reduce((sum, q) => sum + (q.estimatedWaitMinutes || 0), 0) / waiting.length)
-      : 0;
+    const servedQueues = todayQueues.filter(
+      (item) => (item.status === "completed" || item.status === "serving")
+    );
+    let waitSamples = [];
+    servedQueues.forEach((item) => {
+      const start = new Date(item.createdAt).getTime();
+      let diff = 0;
+      if (item.calledAt) diff = Math.max(1, Math.round((new Date(item.calledAt).getTime() - start) / 60000));
+      else if (item.completedAt) diff = Math.max(1, Math.round((new Date(item.completedAt).getTime() - start) / 60000));
+      else if (item.estimatedWaitMinutes > 0) diff = item.estimatedWaitMinutes;
+      if (diff > 0 && diff < 1440) waitSamples.push(diff);
+    });
+    if (waitSamples.length === 0) {
+      waiting.forEach((item) => {
+        const start = new Date(item.createdAt).getTime();
+        const elapsed = Math.max(1, Math.round((Date.now() - start) / 60000));
+        if (elapsed > 0 && elapsed < 1440) waitSamples.push(elapsed);
+        else if (item.estimatedWaitMinutes > 0) waitSamples.push(item.estimatedWaitMinutes);
+      });
+    }
+    const avgWait = waitSamples.length > 0
+      ? Math.round(waitSamples.reduce((sum, v) => sum + v, 0) / waitSamples.length)
+      : (waiting.length > 0 ? 5 : 0);
 
     // AI Heuristic predictions
     const projectedNextHourLoad = Math.max(2, Math.round(waiting.length * 1.3));

@@ -11,7 +11,25 @@ function Dashboard() {
     const [activeNav, setActiveNav] = useState("Overview");
     const [timeRange, setTimeRange] = useState("today"); // "today" | "all"
     const [theme, setTheme] = useState(() => localStorage.getItem("queueless-theme") || "dark");
+    const [now, setNow] = useState(Date.now());
     const navigate = useNavigate();
+
+    // Live 1-second real-time clock ticker for live wait times and elapsed telemetry
+    useEffect(() => {
+        const timer = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    function formatLiveDuration(isoDate, endIsoDate = null) {
+        if (!isoDate) return "0s";
+        const startMs = new Date(isoDate).getTime();
+        const endMs = endIsoDate ? new Date(endIsoDate).getTime() : now;
+        const diffSecs = Math.max(0, Math.floor((endMs - startMs) / 1000));
+        const mins = Math.floor(diffSecs / 60);
+        const secs = diffSecs % 60;
+        if (mins === 0) return `${secs}s`;
+        return `${mins}m ${secs}s`;
+    }
 
     // Queues and Stats
     const [queueData, setQueueData] = useState([]);
@@ -244,7 +262,7 @@ function Dashboard() {
         }
     }
 
-    // Initial load + Real-time auto-refresh polling every 6s
+    // Initial load + Real-time auto-refresh polling (every 2.5s)
     useEffect(() => {
         if (!user) return;
         fetchQueue();
@@ -261,7 +279,7 @@ function Dashboard() {
             if (user.role === "manager") {
                 fetchStaff();
             }
-        }, 6000);
+        }, 2500);
 
         return () => clearInterval(interval);
     }, [user]);
@@ -1088,8 +1106,9 @@ function Dashboard() {
                                         <span className="kpi-icon-pill">⚡</span>
                                     </div>
                                     <div className="kpi-number-display">{activeStats.averageWaitTime} <small>min</small></div>
-                                    <div className="kpi-subtext">
-                                        <span>Active wait calculation</span>
+                                    <div className="kpi-subtext" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                        <span className="pulse-dot" style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#3b82f6", display: "inline-block" }} />
+                                        <span>Live dynamic calculation</span>
                                     </div>
                                 </article>
                             </section>
@@ -1171,8 +1190,8 @@ function Dashboard() {
                                                     <strong>Token #{item.serviceName?.slice(0, 1).toUpperCase()}-{String(item.tokenNumber).padStart(3, "0")} is {item.status.toUpperCase()}</strong>
                                                     <p>{item.customerName} · {item.serviceName} {item.counterNumber ? `· ${item.counterNumber}` : ""}</p>
                                                 </div>
-                                                <span className="feed-time">
-                                                    {new Date(item.updatedAt || item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                                <span className="feed-time" title={new Date(item.updatedAt || item.createdAt).toLocaleTimeString()}>
+                                                    {formatLiveDuration(item.updatedAt || item.createdAt)} ago
                                                 </span>
                                             </div>
                                         ))
@@ -1246,7 +1265,7 @@ function Dashboard() {
                                             <th>Customer Name</th>
                                             <th>Department / Service</th>
                                             <th>Station</th>
-                                            <th>Wait Time</th>
+                                            <th>Wait Time & Telemetry</th>
                                             <th>Status & Quick Action</th>
                                         </tr>
                                     </thead>
@@ -1269,7 +1288,43 @@ function Dashboard() {
                                                     </td>
                                                     <td>{item.serviceName}</td>
                                                     <td>{item.counterNumber || "-"}</td>
-                                                    <td>{item.estimatedWaitMinutes} min</td>
+                                                    <td>
+                                                        {item.status === "waiting" && (
+                                                            <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                                                                <span style={{ fontWeight: "700", color: "#2563eb", fontSize: "13px" }}>
+                                                                    ⏱️ {formatLiveDuration(item.createdAt)}
+                                                                </span>
+                                                                <span style={{ fontSize: "11.5px", color: "var(--qd-muted)" }}>
+                                                                    {item.peopleAhead !== undefined && item.peopleAhead > 0
+                                                                        ? `${item.peopleAhead} ahead · ~${item.dynamicWaitMinutes || item.estimatedWaitMinutes || (item.peopleAhead * 5)} min`
+                                                                        : "Next in line · ~2 min"}
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                        {item.status === "serving" && (
+                                                            <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                                                                <span style={{ fontWeight: "700", color: "#16a34a", fontSize: "13px" }}>
+                                                                    🔔 Serving: {formatLiveDuration(item.calledAt || item.updatedAt)}
+                                                                </span>
+                                                                <span style={{ fontSize: "11.5px", color: "var(--qd-muted)" }}>
+                                                                    At {item.counterNumber || "Counter 1"}
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                        {item.status === "completed" && (
+                                                            <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                                                                <span style={{ fontWeight: "600", color: "var(--qd-text-secondary)", fontSize: "12.5px" }}>
+                                                                    ✓ {formatLiveDuration(item.createdAt, item.completedAt || item.updatedAt)} total
+                                                                </span>
+                                                                <span style={{ fontSize: "11px", color: "var(--qd-muted)" }}>
+                                                                    Completed
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                        {item.status === "cancelled" && (
+                                                            <span style={{ color: "#ef4444", fontSize: "12px", fontWeight: "600" }}>✕ Cancelled</span>
+                                                        )}
+                                                    </td>
                                                     <td>
                                                         <div className="status-action-cell">
                                                             <span className={`status-pill-badge ${item.status}`}>

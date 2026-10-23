@@ -32,12 +32,32 @@ export default function DisplayBoard() {
 
   useEffect(() => {
     fetchLiveBoard();
-    const interval = setInterval(fetchLiveBoard, 4000);
+    const interval = setInterval(fetchLiveBoard, 2500);
     return () => clearInterval(interval);
   }, []);
 
   // Filter currently serving across all counters
   const activeServing = services.filter((s) => s.currentlyServingToken);
+
+  // Play audio chime when a new token is called
+  useEffect(() => {
+    const servingTokensKey = activeServing
+      .map((s) => `${s.id}:${s.currentlyServingToken}`)
+      .sort()
+      .join("|");
+
+    if (servingTokensKey && lastServingIdRef.current && lastServingIdRef.current !== servingTokensKey) {
+      try {
+        playChime();
+      } catch (err) {
+        console.error("Board chime error:", err);
+      }
+    }
+
+    if (servingTokensKey) {
+      lastServingIdRef.current = servingTokensKey;
+    }
+  }, [activeServing]);
 
   return (
     <div className="tv-board-app">
@@ -95,7 +115,7 @@ export default function DisplayBoard() {
         <section className="tv-bottom-summary">
           <div className="tv-summary-header">
             <h3>DEPARTMENTS & QUEUE STATUS</h3>
-            <span>Auto-synced live every 4 seconds</span>
+            <span>Auto-synced live (2.5s real-time)</span>
           </div>
 
           <div className="tv-departments-grid">

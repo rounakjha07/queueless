@@ -47,10 +47,26 @@ export default function CustomerPortal() {
   const [customerLoginLoading, setCustomerLoginLoading] = useState(false);
   const [customerLoginError, setCustomerLoginError] = useState("");
   const [theme, setTheme] = useState(() => localStorage.getItem("queueless-theme") || "light");
+  const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
     localStorage.setItem("queueless-theme", theme);
   }, [theme]);
+
+  // Live 1-second real-time clock ticker for elapsed timers
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  function formatLiveDuration(isoDate) {
+    if (!isoDate) return "0s";
+    const diffSecs = Math.max(0, Math.floor((now - new Date(isoDate).getTime()) / 1000));
+    const mins = Math.floor(diffSecs / 60);
+    const secs = diffSecs % 60;
+    if (mins === 0) return `${secs}s`;
+    return `${mins}m ${secs}s`;
+  }
 
   // Track chime playback to prevent repeat noise while token is serving
   const chimePlayedTokensRef = useRef(new Set());
@@ -133,7 +149,7 @@ export default function CustomerPortal() {
     }
   }
 
-  // Polling for live queue telemetry & services
+  // Polling for live queue telemetry & services (Real-time 2.5s sync)
   useEffect(() => {
     if (!user) return;
     fetchLiveStatus();
@@ -141,7 +157,7 @@ export default function CustomerPortal() {
     const interval = setInterval(() => {
       fetchLiveStatus();
       fetchExploreServices();
-    }, 3500);
+    }, 2500);
     return () => clearInterval(interval);
   }, [user]);
 
@@ -753,22 +769,27 @@ export default function CustomerPortal() {
 
               {/* Progress & Live Telemetry Info */}
               {isServing && (
-                <div className="serving-announcement-box" style={{ background: "#22c55e15", border: "2px solid #22c55e", padding: "18px 20px", borderRadius: "14px", marginTop: "18px", display: "flex", alignItems: "center", gap: "16px" }}>
+                <div className="serving-announcement-box" style={{ background: "rgba(34, 197, 94, 0.12)", border: "2px solid #22c55e", padding: "18px 20px", borderRadius: "14px", marginTop: "18px", display: "flex", alignItems: "center", gap: "16px" }}>
                   <span style={{ fontSize: "36px", animation: "pulse-node 1.2s infinite" }}>🔔</span>
-                  <div>
+                  <div style={{ flex: 1 }}>
                     <strong style={{ fontSize: "19px", color: "#15803d", display: "block" }}>
                       IT'S YOUR TURN! PROCEED TO COUNTER
                     </strong>
-                    <p style={{ margin: "4px 0 0", fontSize: "14.5px", color: "#166534" }}>
+                    <p style={{ margin: "4px 0 0", fontSize: "14.5px", color: "var(--cust-text-main)" }}>
                       Please proceed immediately to: <b style={{ fontSize: "17px", textDecoration: "underline" }}>{liveToken.counterNumber || "Counter 1"}</b>
                       {liveToken.staffName && <span> (Staff: <b>{liveToken.staffName}</b>)</span>}
                     </p>
+                    <div style={{ marginTop: "8px", display: "flex", gap: "16px", alignItems: "center", flexWrap: "wrap", fontSize: "12.5px" }}>
+                      <span style={{ color: "#15803d", fontWeight: "700" }}>
+                        ⏱️ Active at Counter: {formatLiveDuration(liveToken.calledAt || liveToken.createdAt)}
+                      </span>
+                    </div>
                   </div>
                 </div>
               )}
 
               {isWaiting && (
-                <div className="ticket-metrics-row">
+                <div className="ticket-metrics-row" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))" }}>
                   <div className="metric-box">
                     <span className="metric-num" style={{ color: "#2563eb" }}>{liveToken.peopleAhead}</span>
                     <span className="metric-sub">People Ahead</span>
@@ -776,14 +797,21 @@ export default function CustomerPortal() {
 
                   <div className="metric-box">
                     <span className="metric-num" style={{ color: "#059669" }}>
-                      {liveToken.estimatedWaitMinutes === 0 ? "Next!" : `~${liveToken.estimatedWaitMinutes} min`}
+                      {liveToken.estimatedWaitMinutes === 0 ? "Next in Line!" : `~${liveToken.estimatedWaitMinutes} min`}
                     </span>
-                    <span className="metric-sub">Est. Wait Time</span>
+                    <span className="metric-sub">Est. Remaining</span>
+                  </div>
+
+                  <div className="metric-box">
+                    <span className="metric-num" style={{ color: "#8b5cf6" }}>
+                      {formatLiveDuration(liveToken.createdAt)}
+                    </span>
+                    <span className="metric-sub">Waiting So Far</span>
                   </div>
 
                   <div className="metric-box">
                     <span className="metric-num" style={{ color: "#d97706" }}>
-                      {liveToken.currentlyServing ? liveToken.currentlyServing.tokenCode : "Waiting"}
+                      {liveToken.currentlyServing ? liveToken.currentlyServing.tokenCode : "Ready"}
                     </span>
                     <span className="metric-sub">
                       {liveToken.currentlyServing ? `At ${liveToken.currentlyServing.counterNumber}` : "Counter Ready"}
@@ -793,7 +821,7 @@ export default function CustomerPortal() {
               )}
 
               {isCompleted && (
-                <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", padding: "16px 20px", borderRadius: "12px", marginTop: "16px", color: "#15803d" }}>
+                <div style={{ background: "rgba(16, 185, 129, 0.15)", border: "1px solid #10b981", padding: "16px 20px", borderRadius: "12px", marginTop: "16px", color: "#10b981" }}>
                   <strong style={{ fontSize: "16px", display: "block", marginBottom: "4px" }}>
                     ✓ Consultation / Service Completed
                   </strong>
@@ -853,10 +881,11 @@ export default function CustomerPortal() {
               {/* Footer Row */}
               <div className="ticket-footer-row" style={{ marginTop: "18px" }}>
                 <span className="ticket-timestamp">
-                  Token generated at {new Date(liveToken.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  Arrived: {new Date(liveToken.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })} ({formatLiveDuration(liveToken.createdAt)} ago)
                 </span>
-                <span style={{ fontSize: "12px", color: "#10b981", fontWeight: "700" }}>
-                  ● Live Auto-Sync Active (Updates every 3s)
+                <span style={{ fontSize: "12px", color: "#10b981", fontWeight: "700", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span className="pulse-dot" style={{ width: "7px", height: "7px", background: "#10b981", borderRadius: "50%", display: "inline-block" }} />
+                  Live Sync Active (2.5s)
                 </span>
               </div>
             </div>
