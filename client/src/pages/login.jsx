@@ -6,9 +6,10 @@ function Login() {
     const searchParams = new URLSearchParams(window.location.search);
     const [loginTab, setLoginTab] = useState(() => {
         const t = searchParams.get("tab");
-        if (t === "staff" || t === "provider") return "staff";
+        if (t === "provider" || t === "manager") return "provider";
+        if (t === "customer") return "customer";
         if (t === "token" || t === "otp") return "token";
-        return "customer";
+        return "staff"; // Default to Staff Sign In
     });
 
     // Staff / Manager login state
@@ -233,11 +234,11 @@ function Login() {
                             Choose your access type to proceed:
                         </p>
 
-                        {/* 3-Tab Switch: Customer vs Token OTP vs Staff & Provider */}
+                        {/* 4-Tab Switch: Staff Sign In vs Provider vs Customer vs Token OTP */}
                         <div
                             style={{
                                 display: "grid",
-                                gridTemplateColumns: "1fr 1fr 1fr",
+                                gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
                                 gap: "6px",
                                 background: "#f1f5f9",
                                 padding: "6px",
@@ -245,6 +246,52 @@ function Login() {
                                 marginBottom: "22px",
                             }}
                         >
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setLoginTab("staff");
+                                    setMessage("");
+                                    setIsError(false);
+                                }}
+                                style={{
+                                    padding: "9px 6px",
+                                    border: "none",
+                                    borderRadius: "8px",
+                                    fontWeight: 700,
+                                    fontSize: "12px",
+                                    cursor: "pointer",
+                                    background: loginTab === "staff" ? "#ffffff" : "transparent",
+                                    color: loginTab === "staff" ? "#2563eb" : "#64748b",
+                                    boxShadow: loginTab === "staff" ? "0 2px 6px rgba(0,0,0,0.08)" : "none",
+                                    transition: "all 0.2s ease",
+                                }}
+                            >
+                                🧑‍💼 Staff Sign In
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setLoginTab("provider");
+                                    setMessage("");
+                                    setIsError(false);
+                                }}
+                                style={{
+                                    padding: "9px 6px",
+                                    border: "none",
+                                    borderRadius: "8px",
+                                    fontWeight: 700,
+                                    fontSize: "12px",
+                                    cursor: "pointer",
+                                    background: loginTab === "provider" ? "#ffffff" : "transparent",
+                                    color: loginTab === "provider" ? "#1e293b" : "#64748b",
+                                    boxShadow: loginTab === "provider" ? "0 2px 6px rgba(0,0,0,0.08)" : "none",
+                                    transition: "all 0.2s ease",
+                                }}
+                            >
+                                🏢 Provider Head
+                            </button>
+
                             <button
                                 type="button"
                                 onClick={() => {
@@ -261,7 +308,7 @@ function Login() {
                                     cursor: "pointer",
                                     background: loginTab === "customer" ? "#ffffff" : "transparent",
                                     color: loginTab === "customer" ? "#1e293b" : "#64748b",
-                                    boxShadow: loginTab === "customer" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
+                                    boxShadow: loginTab === "customer" ? "0 2px 6px rgba(0,0,0,0.08)" : "none",
                                     transition: "all 0.2s ease",
                                 }}
                             >
@@ -284,34 +331,11 @@ function Login() {
                                     cursor: "pointer",
                                     background: loginTab === "token" ? "#ffffff" : "transparent",
                                     color: loginTab === "token" ? "#1e293b" : "#64748b",
-                                    boxShadow: loginTab === "token" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
+                                    boxShadow: loginTab === "token" ? "0 2px 6px rgba(0,0,0,0.08)" : "none",
                                     transition: "all 0.2s ease",
                                 }}
                             >
                                 🎟️ Token (OTP)
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setLoginTab("staff");
-                                    setMessage("");
-                                    setIsError(false);
-                                }}
-                                style={{
-                                    padding: "9px 6px",
-                                    border: "none",
-                                    borderRadius: "8px",
-                                    fontWeight: 700,
-                                    fontSize: "12px",
-                                    cursor: "pointer",
-                                    background: loginTab === "staff" ? "#ffffff" : "transparent",
-                                    color: loginTab === "staff" ? "#1e293b" : "#64748b",
-                                    boxShadow: loginTab === "staff" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
-                                    transition: "all 0.2s ease",
-                                }}
-                            >
-                                🏢 Provider / Staff
                             </button>
                         </div>
 
@@ -584,31 +608,117 @@ function Login() {
                             </div>
                         )}
 
-                        {/* ================= TAB 3: STAFF & PROVIDER LOGIN ================= */}
+                        {/* ================= TAB 3: STAFF SIGN IN ================= */}
                         {loginTab === "staff" && (
                             <form onSubmit={handleEmailPasswordLogin}>
-                                <div style={{ marginBottom: "16px", padding: "10px 14px", background: "#f8fafc", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "12.5px", color: "#475569" }}>
-                                    🏢 <b>Control Center Login:</b> Sign in to manage counter queues, call tokens, and view center analytics.
+                                <div style={{ marginBottom: "16px", padding: "12px 14px", background: "#eff6ff", borderRadius: "10px", border: "1px solid #bfdbfe", fontSize: "13px", color: "#1e40af" }}>
+                                    🧑‍💼 <b>Staff Member Sign In:</b> Log in to your allotted counter station to call tokens, serve waiting customers, and manage counter status.
                                 </div>
 
-                                <label htmlFor="login-email">Email address</label>
+                                <label htmlFor="staff-login-email">Staff Email address</label>
                                 <input
-                                    id="login-email"
+                                    id="staff-login-email"
                                     type="email"
-                                    placeholder="you@example.com"
+                                    placeholder="staff@example.com"
                                     autoComplete="email"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     required
+                                    autoFocus
                                 />
 
                                 <div className="auth-label-row">
-                                    <label htmlFor="login-password">Password</label>
+                                    <label htmlFor="staff-login-password">Password</label>
                                 </div>
 
                                 <div className="password-wrap">
                                     <input
-                                        id="login-password"
+                                        id="staff-login-password"
+                                        type={showPassword ? "text" : "password"}
+                                        placeholder="Enter your staff password"
+                                        autoComplete="current-password"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        required
+                                    />
+
+                                    <button
+                                        className="password-toggle"
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        aria-label={showPassword ? "Hide password" : "Show password"}
+                                    >
+                                        {showPassword ? "Hide" : "Show"}
+                                    </button>
+                                </div>
+
+                                {message && (
+                                    <p
+                                        role="status"
+                                        style={{
+                                            color: isError ? "#dc2626" : "#16a34a",
+                                            marginTop: "12px",
+                                            fontSize: "13px",
+                                        }}
+                                    >
+                                        {message}
+                                    </p>
+                                )}
+
+                                <button
+                                    className="auth-primary-btn"
+                                    type="submit"
+                                    disabled={loading}
+                                    style={{ marginTop: "16px" }}
+                                >
+                                    {loading ? "Signing in..." : "Sign In to Staff Desk 🧑‍💼"}
+                                </button>
+
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "16px", fontSize: "12.5px" }}>
+                                    <Link to="/register?role=staff" style={{ color: "#2563eb", fontWeight: "700", textDecoration: "none" }}>
+                                        Have Invite Code? Register Staff ↗
+                                    </Link>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setLoginTab("provider");
+                                            setMessage("");
+                                            setIsError(false);
+                                        }}
+                                        style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", textDecoration: "underline", fontSize: "12.5px" }}
+                                    >
+                                        Provider Head Login →
+                                    </button>
+                                </div>
+                            </form>
+                        )}
+
+                        {/* ================= TAB 4: SERVICE PROVIDER HEAD LOGIN ================= */}
+                        {loginTab === "provider" && (
+                            <form onSubmit={handleEmailPasswordLogin}>
+                                <div style={{ marginBottom: "16px", padding: "12px 14px", background: "#f8fafc", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "13px", color: "#334155" }}>
+                                    🏢 <b>Service Provider Head Login:</b> Access manager controls, counter assignments, staff invite codes, and center analytics.
+                                </div>
+
+                                <label htmlFor="provider-login-email">Provider Email address</label>
+                                <input
+                                    id="provider-login-email"
+                                    type="email"
+                                    placeholder="manager@example.com"
+                                    autoComplete="email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    required
+                                    autoFocus
+                                />
+
+                                <div className="auth-label-row">
+                                    <label htmlFor="provider-login-password">Password</label>
+                                </div>
+
+                                <div className="password-wrap">
+                                    <input
+                                        id="provider-login-password"
                                         type={showPassword ? "text" : "password"}
                                         placeholder="Enter your password"
                                         autoComplete="current-password"
@@ -646,26 +756,27 @@ function Login() {
                                     disabled={loading}
                                     style={{ marginTop: "16px" }}
                                 >
-                                    {loading ? "Logging in..." : "Log in to Control Center 🏢"}
+                                    {loading ? "Logging in..." : "Log In as Service Provider 🏢"}
                                 </button>
 
-                                <div className="auth-divider">
-                                    <span>SERVICE PROVIDER ONBOARDING</span>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "16px", fontSize: "12.5px" }}>
+                                    <Link to="/register?role=manager" style={{ color: "#2563eb", fontWeight: "700", textDecoration: "none" }}>
+                                        Register Service Center ↗
+                                    </Link>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setLoginTab("staff");
+                                            setMessage("");
+                                            setIsError(false);
+                                        }}
+                                        style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", textDecoration: "underline", fontSize: "12.5px" }}
+                                    >
+                                        Staff Member Sign In →
+                                    </button>
                                 </div>
-
-                                <Link className="auth-secondary-btn" to="/register">
-                                    Register Service Center or Staff Account <span>↗</span>
-                                </Link>
                             </form>
                         )}
-
-                        <div className="auth-divider">
-                            <span>SERVICE PROVIDER ONBOARDING</span>
-                        </div>
-
-                        <Link className="auth-secondary-btn" to="/register">
-                            Register Service Center or Staff Account <span>↗</span>
-                        </Link>
 
                         <Link className="auth-back-link" to="/">
                             ← Back to homepage

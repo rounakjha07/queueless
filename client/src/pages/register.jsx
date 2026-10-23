@@ -3,7 +3,12 @@ import { Link, useNavigate } from "react-router-dom";
 
 function Register() {
     const navigate = useNavigate();
-    const [role, setRole] = useState("customer"); // "customer", "manager", "staff"
+    const searchParams = new URLSearchParams(window.location.search);
+    const [role, setRole] = useState(() => {
+        const r = searchParams.get("role");
+        if (r === "staff" || r === "manager") return r;
+        return "customer";
+    });
     const [showPassword, setShowPassword] = useState(false);
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");

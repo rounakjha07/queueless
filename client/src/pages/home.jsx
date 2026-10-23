@@ -17,9 +17,14 @@ function App() {
                 <div className="nav-links">
                     <a href="#how-it-works">How it works</a>
                     <Link to="/customer" style={{ fontWeight: "700", color: "#2563eb" }}>Track Live Token 🎟️</Link>
+                    <Link to="/login?tab=staff" style={{ fontWeight: "600", color: "#475569" }}>Staff Sign In 🧑‍💼</Link>
                 </div>
 
                 <div className="nav-actions">
+                    <Link className="btn btn-outline" to="/login?tab=staff" style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontWeight: "700" }}>
+                        🧑‍💼 Staff Sign In
+                    </Link>
+
                     <Link className="btn btn-outline" to="/login">
                         Log in
                     </Link>

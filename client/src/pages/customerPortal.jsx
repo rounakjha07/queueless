@@ -381,6 +381,14 @@ export default function CustomerPortal() {
               </p>
             </div>
 
+            {/* Quick Staff Switch Notice */}
+            <div style={{ marginBottom: "14px", padding: "9px 12px", background: "rgba(37, 99, 235, 0.08)", borderRadius: "8px", border: "1px solid rgba(37, 99, 235, 0.2)", fontSize: "12.5px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ color: "var(--cust-text-main)" }}>🧑‍💼 Staff Member or Center Manager?</span>
+              <Link to="/login?tab=staff" style={{ fontWeight: "700", color: "#2563eb", textDecoration: "none" }}>
+                Staff Sign In →
+              </Link>
+            </div>
+
             {/* 2-Tab Switcher: Account Login vs Counter Slip OTP */}
             <div className="cust-auth-tab-group">
               <button
