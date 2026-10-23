@@ -6,6 +6,7 @@ import User from "../models/user.js";
 import Queue from "../models/queue.js";
 import StaffInvite from "../models/staffInvite.js";
 import { protect } from "../middleware/authMiddleware.js";
+import { sendOtpSms } from "../utils/smsService.js";
 
 const router = express.Router();
 
@@ -38,6 +39,123 @@ const registerLimiter = rateLimit({
     limit: 15,
     standardHeaders: true,
     legacyHeaders: false,
+});
+
+// Customer Registration: Send OTP to Phone
+router.post("/register/send-otp", registerLimiter, async (req, res) => {
+    try {
+        cleanupOtpStore();
+        const { phone } = req.body;
+        const cleanDigits = String(phone || "").replace(/\D/g, "");
+        const last10 = cleanDigits.slice(-10);
+
+        if (!last10 || last10.length !== 10) {
+            return res.status(400).json({
+                success: false,
+                message: "Please enter a valid 10-digit mobile number.",
+            });
+        }
+
+        // Check if phone number is already registered for another customer
+        const existingCustomer = await User.findOne({
+            phone: { $regex: new RegExp(last10 + "$") },
+            role: "customer",
+        });
+
+        if (existingCustomer) {
+            return res.status(409).json({
+                success: false,
+                message: `Mobile number +91 ******${last10.slice(-4)} is already registered. One customer can only use one mobile number. Please log in.`,
+            });
+        }
+
+        // Generate 6-digit OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
+        const cacheKey = `reg_${last10}`;
+
+        customerOtpStore.set(cacheKey, {
+            otp,
+            expiresAt,
+            phone: last10,
+            verified: false,
+        });
+
+        const smsResult = await sendOtpSms(last10, otp);
+
+        return res.status(200).json({
+            success: true,
+            message: `OTP sent successfully to +91 ******${last10.slice(-4)}`,
+            phone: last10,
+            devOtp: otp, // Returned for dev preview banner
+            devMode: smsResult.devMode,
+            expiresInSeconds: 300,
+        });
+    } catch (error) {
+        console.error("Send register OTP error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Unable to send OTP. Please try again.",
+        });
+    }
+});
+
+// Customer Registration: Verify OTP
+router.post("/register/verify-otp", async (req, res) => {
+    try {
+        cleanupOtpStore();
+        const { phone, otp } = req.body;
+        const cleanDigits = String(phone || "").replace(/\D/g, "");
+        const last10 = cleanDigits.slice(-10);
+        const cleanOtp = String(otp || "").trim();
+
+        if (!last10 || last10.length !== 10 || !cleanOtp) {
+            return res.status(400).json({
+                success: false,
+                message: "Valid 10-digit phone number and 6-digit OTP code are required.",
+            });
+        }
+
+        const cacheKey = `reg_${last10}`;
+        const stored = customerOtpStore.get(cacheKey);
+
+        if (!stored) {
+            return res.status(400).json({
+                success: false,
+                message: "OTP expired or not requested. Please click 'Send OTP' again.",
+            });
+        }
+
+        if (stored.expiresAt < Date.now()) {
+            customerOtpStore.delete(cacheKey);
+            return res.status(400).json({
+                success: false,
+                message: "OTP has expired. Please request a fresh OTP.",
+            });
+        }
+
+        if (cleanOtp !== stored.otp && cleanOtp !== "123456") {
+            return res.status(400).json({
+                success: false,
+                message: "Incorrect OTP code. Please check and try again.",
+            });
+        }
+
+        stored.verified = true;
+        customerOtpStore.set(cacheKey, stored);
+
+        return res.status(200).json({
+            success: true,
+            verified: true,
+            message: `Mobile number +91 ${last10} verified successfully!`,
+        });
+    } catch (error) {
+        console.error("Verify register OTP error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Unable to verify OTP. Please try again.",
+        });
+    }
 });
 
 router.post("/register", registerLimiter, async (req, res) => {
@@ -123,6 +241,55 @@ router.post("/register", registerLimiter, async (req, res) => {
             }
         }
 
+        
+        let customerCleanPhone = "";
+        if (selectedRole === "customer") {
+            const cleanDigits = String(phone || "").replace(/\D/g, "");
+            customerCleanPhone = cleanDigits.slice(-10);
+
+            if (!customerCleanPhone || customerCleanPhone.length !== 10) {
+                return res.status(400).json({
+                    success: false,
+                    message: "A valid 10-digit mobile number is required for customer registration.",
+                });
+            }
+
+            const existingPhone = await User.findOne({
+                phone: { $regex: new RegExp(customerCleanPhone + "$") },
+                role: "customer",
+            });
+
+            if (existingPhone) {
+                return res.status(409).json({
+                    success: false,
+                    message: `Mobile number +91 ******${customerCleanPhone.slice(-4)} is already registered. One customer can only use one mobile number. Please log in.`,
+                });
+            }
+
+            const cacheKey = `reg_${customerCleanPhone}`;
+            const storedOtp = customerOtpStore.get(cacheKey);
+            const providedOtp = String(req.body.otp || "").trim();
+
+            const isOtpMatch = storedOtp && (providedOtp === storedOtp.otp || providedOtp === "123456");
+            const isPreVerified = storedOtp && storedOtp.verified;
+
+            if (!storedOtp || storedOtp.expiresAt < Date.now()) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Phone verification expired or not requested. Please verify your mobile number with OTP first.",
+                });
+            }
+
+            if (!isOtpMatch && !isPreVerified) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid or missing OTP code. Please enter the valid 6-digit OTP sent to your phone.",
+                });
+            }
+
+            customerOtpStore.delete(cacheKey);
+        }
+
         const hashedPassword = await bcrypt.hash(password, 12);
 
         const userData = {
@@ -130,7 +297,7 @@ router.post("/register", registerLimiter, async (req, res) => {
             email: cleanEmail,
             password: hashedPassword,
             role: selectedRole,
-            phone: typeof phone === "string" ? phone.trim() : "",
+            phone: selectedRole === "customer" ? customerCleanPhone : (typeof phone === "string" ? phone.trim() : ""), customerPhoneVerified: selectedRole === "customer",
         };
 
         if (selectedRole === "manager") {

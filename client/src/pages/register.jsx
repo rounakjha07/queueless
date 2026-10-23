@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 function Register() {
@@ -22,22 +22,147 @@ function Register() {
     const [isError, setIsError] = useState(false);
     const [loading, setLoading] = useState(false);
 
+    // OTP Verification State for Customer Registration
+    const [otpSent, setOtpSent] = useState(false);
+    const [otpVerified, setOtpVerified] = useState(false);
+    const [otpCode, setOtpCode] = useState("");
+    const [devOtpNotification, setDevOtpNotification] = useState("");
+    const [countdown, setCountdown] = useState(0);
+    const [otpLoading, setOtpLoading] = useState(false);
+
+    // Countdown Timer for Resend OTP
+    useEffect(() => {
+        if (countdown > 0) {
+            const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+            return () => clearTimeout(timer);
+        }
+    }, [countdown]);
+
+    function handleRoleChange(newRole) {
+        setRole(newRole);
+        setMessage("");
+        setIsError(false);
+        if (newRole !== "customer") {
+            setOtpSent(false);
+            setOtpVerified(false);
+            setOtpCode("");
+            setDevOtpNotification("");
+            setCountdown(0);
+        }
+    }
+
+    async function handleSendOtp() {
+        const cleanDigits = phone.replace(/\D/g, "");
+        if (cleanDigits.length < 10) {
+            setMessage("Please enter a valid 10-digit mobile number.");
+            setIsError(true);
+            return;
+        }
+
+        setMessage("");
+        setIsError(false);
+        setDevOtpNotification("");
+        setOtpLoading(true);
+
+        try {
+            const res = await fetch("http://localhost:5000/api/auth/register/send-otp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ phone: cleanDigits.slice(-10) }),
+            });
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.message || "Failed to send OTP.");
+            }
+
+            setOtpSent(true);
+            if (data.devOtp) {
+                setDevOtpNotification(data.devOtp);
+            }
+            setMessage(data.message || "OTP sent successfully to your mobile number.");
+            setCountdown(45);
+        } catch (err) {
+            setIsError(true);
+            setMessage(err.message);
+        } finally {
+            setOtpLoading(false);
+        }
+    }
+
+    async function handleVerifyOtp() {
+        const cleanDigits = phone.replace(/\D/g, "");
+        const cleanOtp = otpCode.trim();
+
+        if (!cleanOtp || cleanOtp.length < 6) {
+            setMessage("Please enter the complete 6-digit OTP code.");
+            setIsError(true);
+            return;
+        }
+
+        setMessage("");
+        setIsError(false);
+        setOtpLoading(true);
+
+        try {
+            const res = await fetch("http://localhost:5000/api/auth/register/verify-otp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    phone: cleanDigits.slice(-10),
+                    otp: cleanOtp,
+                }),
+            });
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.message || "Invalid OTP code.");
+            }
+
+            setOtpVerified(true);
+            setMessage(data.message || "Mobile number verified successfully! ✅");
+        } catch (err) {
+            setIsError(true);
+            setMessage(err.message);
+        } finally {
+            setOtpLoading(false);
+        }
+    }
+
     async function handleRegister(e) {
         e.preventDefault();
         setMessage("");
         setIsError(false);
+
+        if (role === "customer") {
+            const cleanDigits = phone.replace(/\D/g, "");
+            if (cleanDigits.length < 10) {
+                setMessage("A valid 10-digit mobile number is required.");
+                setIsError(true);
+                return;
+            }
+            if (!otpVerified) {
+                setMessage("Please verify your mobile phone number with OTP first.");
+                setIsError(true);
+                return;
+            }
+        }
+
         setLoading(true);
 
         try {
+            const cleanPhone = phone.replace(/\D/g, "").slice(-10);
             const payload = {
                 name,
                 email,
                 password,
                 role,
-                phone: phone.trim(),
+                phone: cleanPhone,
             };
 
-            if (role === "manager") {
+            if (role === "customer") {
+                payload.otp = otpCode.trim();
+            } else if (role === "manager") {
                 payload.businessName = businessName.trim();
                 payload.address = address.trim();
                 payload.city = city.trim();
@@ -67,6 +192,10 @@ function Register() {
             setEmail("");
             setPassword("");
             setPhone("");
+            setOtpCode("");
+            setOtpSent(false);
+            setOtpVerified(false);
+            setDevOtpNotification("");
             setBusinessName("");
             setInviteCode("");
 
@@ -216,7 +345,7 @@ function Register() {
                         >
                             <button
                                 type="button"
-                                onClick={() => { setRole("customer"); setMessage(""); }}
+                                onClick={() => handleRoleChange("customer")}
                                 style={{
                                     padding: "10px 6px",
                                     border: "none",
@@ -235,7 +364,7 @@ function Register() {
 
                             <button
                                 type="button"
-                                onClick={() => { setRole("manager"); setMessage(""); }}
+                                onClick={() => handleRoleChange("manager")}
                                 style={{
                                     padding: "10px 6px",
                                     border: "none",
@@ -254,7 +383,7 @@ function Register() {
 
                             <button
                                 type="button"
-                                onClick={() => { setRole("staff"); setMessage(""); }}
+                                onClick={() => handleRoleChange("staff")}
                                 style={{
                                     padding: "10px 6px",
                                     border: "none",
@@ -316,18 +445,194 @@ function Register() {
                                 required
                             />
 
-                            {/* Phone (Optional for customers) */}
+                            {/* Customer Phone + OTP Verification */}
                             {role === "customer" && (
-                                <>
-                                    <label htmlFor="register-phone">Phone number (optional)</label>
-                                    <input
-                                        id="register-phone"
-                                        type="tel"
-                                        placeholder="e.g. +91 98765 43210"
-                                        value={phone}
-                                        onChange={(e) => setPhone(e.target.value)}
-                                    />
-                                </>
+                                <div style={{ marginBottom: "18px" }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                                        <label htmlFor="register-phone" style={{ margin: 0, fontWeight: "600" }}>
+                                            Mobile Number <span style={{ color: "#dc2626" }}>*</span>
+                                        </label>
+                                        {otpVerified && (
+                                            <span style={{ fontSize: "12.5px", color: "#16a34a", fontWeight: "700" }}>
+                                                ✓ Verified
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <div style={{ display: "flex", gap: "8px" }}>
+                                        <div style={{ position: "relative", flex: 1 }}>
+                                            <span style={{
+                                                position: "absolute",
+                                                left: "12px",
+                                                top: "50%",
+                                                transform: "translateY(-50%)",
+                                                fontSize: "13px",
+                                                color: "#64748b",
+                                                fontWeight: "600",
+                                                pointerEvents: "none",
+                                            }}>
+                                                +91
+                                            </span>
+                                            <input
+                                                id="register-phone"
+                                                type="tel"
+                                                placeholder="9876543210"
+                                                maxLength={10}
+                                                disabled={otpVerified}
+                                                value={phone}
+                                                onChange={(e) => {
+                                                    const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+                                                    setPhone(digits);
+                                                    if (otpVerified) {
+                                                        setOtpVerified(false);
+                                                        setOtpSent(false);
+                                                        setOtpCode("");
+                                                        setDevOtpNotification("");
+                                                    }
+                                                }}
+                                                style={{
+                                                    paddingLeft: "44px",
+                                                    letterSpacing: "1px",
+                                                    fontWeight: "600",
+                                                    background: otpVerified ? "#f0fdf4" : undefined,
+                                                    borderColor: otpVerified ? "#86efac" : undefined,
+                                                }}
+                                                required
+                                            />
+                                        </div>
+
+                                        {!otpVerified ? (
+                                            <button
+                                                type="button"
+                                                onClick={handleSendOtp}
+                                                disabled={phone.length !== 10 || otpLoading || countdown > 0}
+                                                style={{
+                                                    padding: "0 14px",
+                                                    borderRadius: "10px",
+                                                    border: "1px solid #cbd5e1",
+                                                    background: phone.length === 10 && countdown === 0 ? "#2563eb" : "#f1f5f9",
+                                                    color: phone.length === 10 && countdown === 0 ? "#ffffff" : "#94a3b8",
+                                                    fontWeight: "600",
+                                                    fontSize: "12.5px",
+                                                    cursor: phone.length === 10 && countdown === 0 ? "pointer" : "not-allowed",
+                                                    whiteSpace: "nowrap",
+                                                    transition: "all 0.2s ease",
+                                                }}
+                                            >
+                                                {otpLoading
+                                                    ? "Sending..."
+                                                    : countdown > 0
+                                                        ? `Resend (${countdown}s)`
+                                                        : otpSent
+                                                            ? "Resend OTP"
+                                                            : "Send OTP"}
+                                            </button>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setOtpVerified(false);
+                                                    setOtpSent(false);
+                                                    setOtpCode("");
+                                                    setDevOtpNotification("");
+                                                    setCountdown(0);
+                                                }}
+                                                style={{
+                                                    padding: "0 12px",
+                                                    borderRadius: "10px",
+                                                    border: "1px solid #e2e8f0",
+                                                    background: "#ffffff",
+                                                    color: "#64748b",
+                                                    fontSize: "12px",
+                                                    cursor: "pointer",
+                                                }}
+                                            >
+                                                Change
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Dev OTP preview banner */}
+                                    {devOtpNotification && !otpVerified && (
+                                        <div
+                                            style={{
+                                                background: "#ecfdf5",
+                                                border: "1px solid #6ee7b7",
+                                                borderRadius: "10px",
+                                                padding: "10px 14px",
+                                                marginTop: "10px",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: "10px",
+                                            }}
+                                        >
+                                            <span style={{ fontSize: "18px" }}>📱</span>
+                                            <div style={{ flex: 1 }}>
+                                                <div style={{ fontSize: "12px", color: "#065f46", fontWeight: "600" }}>
+                                                    SMS Gateway: Verification OTP
+                                                </div>
+                                                <div style={{ fontSize: "12px", color: "#047857" }}>
+                                                    Your verification code is:{" "}
+                                                    <b style={{ fontSize: "15px", letterSpacing: "2px", color: "#065f46" }}>
+                                                        {devOtpNotification}
+                                                    </b>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* OTP Input section */}
+                                    {otpSent && !otpVerified && (
+                                        <div style={{ marginTop: "12px" }}>
+                                            <label htmlFor="register-otp" style={{ fontSize: "12.5px", color: "#475569" }}>
+                                                Enter 6-Digit Verification Code
+                                            </label>
+                                            <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+                                                <input
+                                                    id="register-otp"
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    placeholder="e.g. 123456"
+                                                    maxLength={6}
+                                                    value={otpCode}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value.replace(/\D/g, "").slice(0, 6);
+                                                        setOtpCode(val);
+                                                    }}
+                                                    style={{
+                                                        letterSpacing: "4px",
+                                                        fontWeight: "700",
+                                                        fontSize: "16px",
+                                                        textAlign: "center",
+                                                        flex: 1,
+                                                    }}
+                                                    autoFocus
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={handleVerifyOtp}
+                                                    disabled={otpCode.length !== 6 || otpLoading}
+                                                    style={{
+                                                        padding: "0 18px",
+                                                        borderRadius: "10px",
+                                                        border: "none",
+                                                        background: otpCode.length === 6 ? "#16a34a" : "#cbd5e1",
+                                                        color: "#ffffff",
+                                                        fontWeight: "700",
+                                                        fontSize: "13px",
+                                                        cursor: otpCode.length === 6 ? "pointer" : "not-allowed",
+                                                        transition: "all 0.2s ease",
+                                                    }}
+                                                >
+                                                    {otpLoading ? "Verifying..." : "Verify OTP ✓"}
+                                                </button>
+                                            </div>
+                                            <span style={{ fontSize: "11px", color: "#64748b", marginTop: "4px", display: "block" }}>
+                                                Code valid for 5 minutes. One mobile number can only be used by one customer.
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
                             )}
 
                             {/* Business Name and Location (For Manager) */}
@@ -433,12 +738,16 @@ function Register() {
                             <button
                                 className="auth-primary-btn"
                                 type="submit"
-                                disabled={loading}
+                                disabled={loading || (role === "customer" && !otpVerified)}
+                                style={{
+                                    opacity: role === "customer" && !otpVerified ? 0.7 : 1,
+                                    cursor: role === "customer" && !otpVerified ? "not-allowed" : "pointer",
+                                }}
                             >
                                 {loading
                                     ? "Creating account..."
                                     : role === "customer"
-                                        ? "Register as Customer"
+                                        ? (otpVerified ? "Register as Customer" : "Verify Mobile OTP to Continue")
                                         : role === "manager"
                                             ? "Register as Service Provider Head"
                                             : "Register as Counter Staff"}
