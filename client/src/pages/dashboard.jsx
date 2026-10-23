@@ -83,6 +83,13 @@ function Dashboard() {
     const [callingNextLoading, setCallingNextLoading] = useState(false);
     const [seedingLoading, setSeedingLoading] = useState(false);
 
+    // Staff Reassign / Shuffle modal state
+    const [reassignModalOpen, setReassignModalOpen] = useState(false);
+    const [reassignStaffTarget, setReassignStaffTarget] = useState(null);
+    const [reassignNewService, setReassignNewService] = useState("");
+    const [reassignNewCounter, setReassignNewCounter] = useState("Counter 1");
+    const [reassignLoading, setReassignLoading] = useState(false);
+
     // AI Copilot state
     const [aiInsights, setAiInsights] = useState(null);
     const [aiInsightsLoading, setAiInsightsLoading] = useState(false);
@@ -273,11 +280,31 @@ function Dashboard() {
         }
         fetchAiInsights();
 
+        async function fetchUserSilent() {
+            try {
+                const res = await fetch("http://localhost:5000/api/auth/me", { credentials: "include" });
+                const data = await res.json();
+                if (res.ok && data.user) {
+                    setUser((prev) => {
+                        if (prev && (prev.assignedService !== data.user.assignedService || prev.counterNumber !== data.user.counterNumber)) {
+                            setServiceName(data.user.assignedService);
+                            return data.user;
+                        }
+                        return prev;
+                    });
+                }
+            } catch {
+                // ignore
+            }
+        }
+
         const interval = setInterval(() => {
             fetchQueue();
             fetchStats();
             if (user.role === "manager") {
                 fetchStaff();
+            } else if (user.role === "staff") {
+                fetchUserSilent();
             }
         }, 2500);
 
@@ -559,6 +586,46 @@ function Dashboard() {
             if (res.ok) await fetchStaff();
         } catch (err) {
             console.error(err);
+        }
+    }
+
+    // Open Staff Reassign / Shuffle Modal
+    function openReassignModal(staff) {
+        setReassignStaffTarget(staff);
+        setReassignNewService(staff.assignedService || (services[0] || ""));
+        setReassignNewCounter(staff.counterNumber || "Counter 1");
+        setReassignModalOpen(true);
+    }
+
+    // Submit Staff Reassign / Shuffle to new service and counter
+    async function handleReassignStaffSubmit(e) {
+        e.preventDefault();
+        if (!reassignStaffTarget || !reassignNewService) {
+            alert("Please select a target service.");
+            return;
+        }
+        setReassignLoading(true);
+        try {
+            const res = await fetch(`http://localhost:5000/api/staff/${reassignStaffTarget._id}/reassign`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({
+                    serviceName: reassignNewService,
+                    counterNumber: reassignNewCounter.trim() || "Counter 1",
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.message || "Failed to reassign staff member.");
+            alert(data.message || "✓ Staff reassigned successfully!");
+            setReassignModalOpen(false);
+            setReassignStaffTarget(null);
+            await fetchStaff();
+            await fetchQueue();
+        } catch (err) {
+            alert("⚠️ " + err.message);
+        } finally {
+            setReassignLoading(false);
         }
     }
 
@@ -935,6 +1002,87 @@ function Dashboard() {
                                 >
                                     {addingCustomer ? "Issuing..." : "Generate Token Now →"}
                                 </button>
+                            </form>
+                        </div>
+                    )}
+
+                    {/* Shuffle / Reassign Staff Modal */}
+                    {reassignModalOpen && reassignStaffTarget && (
+                        <div className="qd-modal-card" style={{ maxWidth: "500px" }}>
+                            <div className="modal-header">
+                                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                    <span style={{ fontSize: "22px" }}>🔀</span>
+                                    <div>
+                                        <h3 style={{ margin: 0, fontSize: "17px" }}>Shuffle / Reassign Staff Member</h3>
+                                        <p style={{ margin: "2px 0 0", fontSize: "12px", color: "var(--text-muted)" }}>
+                                            Reallocate <b>{reassignStaffTarget.name}</b> to another service or counter station
+                                        </p>
+                                    </div>
+                                </div>
+                                <button className="modal-close" onClick={() => setReassignModalOpen(false)}>✕</button>
+                            </div>
+
+                            <form onSubmit={handleReassignStaffSubmit} className="modal-form-grid" style={{ marginTop: "16px" }}>
+                                <div style={{ background: "rgba(37, 99, 235, 0.08)", padding: "12px 14px", borderRadius: "10px", border: "1px solid rgba(37, 99, 235, 0.2)", fontSize: "12.5px" }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                                        <span>Staff Member:</span>
+                                        <strong style={{ color: "var(--text-main)" }}>{reassignStaffTarget.name} ({reassignStaffTarget.email})</strong>
+                                    </div>
+                                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                        <span>Current Allotment:</span>
+                                        <strong style={{ color: "#2563eb" }}>{reassignStaffTarget.assignedService} · {reassignStaffTarget.counterNumber || "Counter 1"}</strong>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "6px" }}>
+                                        Target Department / Service
+                                    </label>
+                                    <select
+                                        value={reassignNewService}
+                                        onChange={(e) => setReassignNewService(e.target.value)}
+                                        required
+                                        style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid var(--border-color)", background: "var(--input-bg)", color: "var(--text-color)" }}
+                                    >
+                                        <option value="" disabled>Select Target Department</option>
+                                        {services.map((srv) => (
+                                            <option key={srv} value={srv}>
+                                                {srv} {srv === reassignStaffTarget.assignedService ? "(Current)" : ""}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "6px" }}>
+                                        Target Station / Counter
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. Counter 1, Counter 2, Reception Desk"
+                                        value={reassignNewCounter}
+                                        onChange={(e) => setReassignNewCounter(e.target.value)}
+                                        required
+                                    />
+                                </div>
+
+                                <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setReassignModalOpen(false)}
+                                        style={{ flex: 1, padding: "11px", background: "var(--card-bg)", border: "1px solid var(--border-color)", borderRadius: "8px", color: "var(--text-color)", cursor: "pointer", fontWeight: "600" }}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        className="submit-token-btn"
+                                        disabled={reassignLoading}
+                                        style={{ flex: 2 }}
+                                    >
+                                        {reassignLoading ? "Reassigning..." : "Confirm & Shuffle 🔀"}
+                                    </button>
+                                </div>
                             </form>
                         </div>
                     )}
@@ -1468,12 +1616,34 @@ function Dashboard() {
                                                     <td><span className="service-pill-tag">{st.assignedService}</span></td>
                                                     <td><strong>{st.counterNumber || "Counter 1"}</strong></td>
                                                     <td>
-                                                        <button
-                                                            className="table-delete-btn"
-                                                            onClick={() => handleRemoveStaff(st._id, st.name)}
-                                                        >
-                                                            Remove
-                                                        </button>
+                                                        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                                                            <button
+                                                                type="button"
+                                                                style={{
+                                                                    background: "rgba(37, 99, 235, 0.12)",
+                                                                    color: "#2563eb",
+                                                                    border: "1px solid rgba(37, 99, 235, 0.3)",
+                                                                    padding: "6px 12px",
+                                                                    borderRadius: "7px",
+                                                                    fontWeight: "700",
+                                                                    fontSize: "12px",
+                                                                    cursor: "pointer",
+                                                                    display: "inline-flex",
+                                                                    alignItems: "center",
+                                                                    gap: "5px",
+                                                                }}
+                                                                onClick={() => openReassignModal(st)}
+                                                                title="Shuffle / Reassign this staff member to another service or counter"
+                                                            >
+                                                                🔀 Shuffle Service
+                                                            </button>
+                                                            <button
+                                                                className="table-delete-btn"
+                                                                onClick={() => handleRemoveStaff(st._id, st.name)}
+                                                            >
+                                                                Remove
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             ))

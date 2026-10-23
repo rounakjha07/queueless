@@ -169,6 +169,68 @@ router.delete("/:id", protect, async (req, res) => {
   }
 });
 
+// 4.5 Manager reassigns / shuffles staff member to another service & counter
+router.patch("/:id/reassign", protect, async (req, res) => {
+  try {
+    if (req.user.role !== "manager") {
+      return res.status(403).json({
+        success: false,
+        message: "Only Service Provider Heads can reassign staff.",
+      });
+    }
+
+    const { serviceName, assignedService, counterNumber } = req.body;
+    const targetService = (serviceName || assignedService)?.trim();
+
+    if (!targetService) {
+      return res.status(400).json({
+        success: false,
+        message: "Please specify a target department/service to reassign.",
+      });
+    }
+
+    const staff = await User.findOne({
+      _id: req.params.id,
+      managerId: req.user.id,
+      role: "staff",
+    });
+
+    if (!staff) {
+      return res.status(404).json({
+        success: false,
+        message: "Staff member not found or does not belong to your center.",
+      });
+    }
+
+    const oldService = staff.assignedService;
+    const oldCounter = staff.counterNumber || "Counter 1";
+
+    staff.assignedService = targetService;
+    if (counterNumber && typeof counterNumber === "string" && counterNumber.trim()) {
+      staff.counterNumber = counterNumber.trim();
+    }
+    await staff.save();
+
+    return res.json({
+      success: true,
+      message: `${staff.name} successfully shuffled from ${oldService} (${oldCounter}) to ${staff.assignedService} (${staff.counterNumber}).`,
+      staff: {
+        _id: staff._id,
+        name: staff.name,
+        email: staff.email,
+        assignedService: staff.assignedService,
+        counterNumber: staff.counterNumber,
+      },
+    });
+  } catch (error) {
+    console.error("Staff reassign error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to reassign staff member.",
+    });
+  }
+});
+
 // 5. Staff fetches their counter status & assigned service queue
 router.get("/my-counter", protect, async (req, res) => {
   try {
