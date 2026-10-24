@@ -3,6 +3,7 @@ import crypto from "crypto";
 import User from "../models/user.js";
 import StaffInvite from "../models/staffInvite.js";
 import Queue from "../models/queue.js";
+import Service from "../models/service.js";
 import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -304,18 +305,31 @@ router.get("/my-counter", protect, async (req, res) => {
       (q) => q.status === "completed" && q.servedBy?.toString() === staffUser._id.toString()
     ).length;
 
+    const serviceDoc = await Service.findOne({
+      createdBy: staffUser.managerId,
+      name: {
+        $regex: `^${staffUser.assignedService.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+        $options: "i",
+      },
+    });
+
+    const paidQueues = queues.filter((q) => q.paymentStatus === "paid");
+    const counterRevenue = paidQueues.reduce((sum, q) => sum + (q.paidAmount || q.serviceFee || 0), 0);
+
     return res.json({
       success: true,
       counter: {
         counterNumber: staffUser.counterNumber || "Counter 1",
         assignedService: staffUser.assignedService,
         staffName: staffUser.name,
+        serviceFee: typeof serviceDoc?.price === "number" ? serviceDoc.price : 100,
       },
       currentlyServing: currentlyServing || null,
       waitingQueue,
       stats: {
         waitingCount: waitingQueue.length,
         servedTodayCount: completedToday,
+        counterRevenue,
       },
     });
   } catch (error) {

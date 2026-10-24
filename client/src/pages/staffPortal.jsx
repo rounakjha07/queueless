@@ -17,6 +17,8 @@ export default function StaffPortal() {
   const [walkinName, setWalkinName] = useState("");
   const [walkinPhone, setWalkinPhone] = useState("");
   const [showWalkinForm, setShowWalkinForm] = useState(false);
+  const [walkinPaymentMethod, setWalkinPaymentMethod] = useState("cash"); // "cash" | "upi" | "waived"
+  const [walkinPaymentConfirmed, setWalkinPaymentConfirmed] = useState(false);
 
   // Timer for currently serving
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -137,6 +139,14 @@ export default function StaffPortal() {
   async function handleAddWalkin(e) {
     e.preventDefault();
     if (!walkinName.trim()) return;
+    const fee = counterData?.counter?.serviceFee ?? 100;
+    const isWaived = walkinPaymentMethod === "waived";
+
+    if (fee > 0 && !isWaived && !walkinPaymentConfirmed) {
+      setStatusMessage(`⚠️ Please collect ₹${fee} payment from the customer before issuing token.`);
+      return;
+    }
+
     setActionLoading(true);
     try {
       const res = await fetch(`${API_BASE}/api/queue`, {
@@ -147,14 +157,20 @@ export default function StaffPortal() {
           serviceName: user.assignedService,
           customerName: walkinName.trim(),
           customerPhone: walkinPhone.trim(),
+          paidAmount: isWaived ? 0 : fee,
+          paymentStatus: isWaived ? "waived" : "paid",
+          paymentMethod: walkinPaymentMethod,
+          paymentRef: walkinPaymentMethod === "cash" ? `CASH-${Date.now().toString().slice(-6)}` : `UPI-${Date.now().toString().slice(-6)}`,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to create token.");
       setWalkinName("");
       setWalkinPhone("");
+      setWalkinPaymentConfirmed(false);
+      setWalkinPaymentMethod("cash");
       setShowWalkinForm(false);
-      setStatusMessage(`Token #${data.queue.tokenNumber} created for ${data.queue.customerName}!`);
+      setStatusMessage(`✓ Token #${data.queue.tokenNumber} created for ${data.queue.customerName}! Payment ₹${data.queue.paidAmount} verified.`);
       await fetchCounterStatus();
     } catch (err) {
       setStatusMessage(err.message);
@@ -255,6 +271,12 @@ export default function StaffPortal() {
           </div>
 
           <div className="staff-kpi-card">
+            <span className="kpi-label">Counter Collection</span>
+            <span className="kpi-value info" style={{ color: "#10b981" }}>₹{counterData?.stats?.counterRevenue || 0}</span>
+            <span className="kpi-desc">Today's collection at counter</span>
+          </div>
+
+          <div className="staff-kpi-card">
             <span className="kpi-label">Counter Station</span>
             <span className="kpi-value info">{user.counterNumber}</span>
             <span className="kpi-desc">Assigned by Service Provider Head</span>
@@ -311,6 +333,14 @@ export default function StaffPortal() {
                     <span className="label">Service</span>
                     <span className="val">{currentlyServing.serviceName}</span>
                   </div>
+                  <div className="cust-info-group">
+                    <span className="label">Payment Status</span>
+                    <span className="val" style={{ color: "#10b981", fontWeight: "700" }}>
+                      {currentlyServing.paymentStatus === "waived"
+                        ? "🎁 WAIVED"
+                        : `✓ PAID ₹${currentlyServing.paidAmount !== undefined ? currentlyServing.paidAmount : (currentlyServing.serviceFee || 100)} (${(currentlyServing.paymentMethod || "cash").toUpperCase()})`}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="serving-action-bar">
@@ -366,29 +396,159 @@ export default function StaffPortal() {
             </div>
 
             {/* Quick Walk-in Customer Form */}
-            {showWalkinForm && (
-              <form className="walkin-form" onSubmit={handleAddWalkin}>
-                <h4>Issue Token for Walk-in Customer</h4>
-                <div className="form-fields">
-                  <input
-                    type="text"
-                    placeholder="Customer Name"
-                    value={walkinName}
-                    onChange={(e) => setWalkinName(e.target.value)}
-                    required
-                  />
-                  <input
-                    type="tel"
-                    placeholder="Phone (Optional)"
-                    value={walkinPhone}
-                    onChange={(e) => setWalkinPhone(e.target.value)}
-                  />
-                  <button type="submit" disabled={actionLoading}>
-                    {actionLoading ? "Generating..." : "Generate Token"}
+            {showWalkinForm && (() => {
+              const fee = counterData?.counter?.serviceFee ?? 100;
+              const isWaived = walkinPaymentMethod === "waived";
+              const canIssue = actionLoading || isWaived || fee === 0 || walkinPaymentConfirmed;
+
+              return (
+                <form className="walkin-form" onSubmit={handleAddWalkin}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                    <h4 style={{ margin: 0 }}>Issue Token for Walk-in Customer</h4>
+                    <span style={{ fontSize: "12px", background: "rgba(16, 185, 129, 0.15)", color: "#10b981", fontWeight: "700", padding: "3px 10px", borderRadius: "10px" }}>
+                      Fee: ₹{fee}
+                    </span>
+                  </div>
+
+                  <div className="form-fields">
+                    <input
+                      type="text"
+                      placeholder="Customer Name"
+                      value={walkinName}
+                      onChange={(e) => setWalkinName(e.target.value)}
+                      required
+                    />
+                    <input
+                      type="tel"
+                      placeholder="Phone (Optional)"
+                      value={walkinPhone}
+                      onChange={(e) => setWalkinPhone(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Payment Collection Options */}
+                  <div style={{
+                    background: "rgba(0, 0, 0, 0.15)",
+                    border: "1px solid rgba(255, 255, 255, 0.1)",
+                    borderRadius: "10px",
+                    padding: "12px",
+                    marginTop: "10px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "10px"
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: "12px", color: "var(--staff-text-muted)" }}>Select Payment Mode:</span>
+                      <strong style={{ color: "#10b981", fontSize: "14px" }}>
+                        ₹{isWaived ? 0 : fee}
+                      </strong>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px" }}>
+                      <button
+                        type="button"
+                        onClick={() => setWalkinPaymentMethod("cash")}
+                        style={{
+                          padding: "6px 8px",
+                          borderRadius: "6px",
+                          fontSize: "12px",
+                          fontWeight: "700",
+                          border: walkinPaymentMethod === "cash" ? "2px solid #10b981" : "1px solid rgba(255,255,255,0.15)",
+                          background: walkinPaymentMethod === "cash" ? "rgba(16, 185, 129, 0.2)" : "transparent",
+                          color: walkinPaymentMethod === "cash" ? "#10b981" : "inherit",
+                          cursor: "pointer"
+                        }}
+                      >
+                        💵 Cash
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setWalkinPaymentMethod("upi")}
+                        style={{
+                          padding: "6px 8px",
+                          borderRadius: "6px",
+                          fontSize: "12px",
+                          fontWeight: "700",
+                          border: walkinPaymentMethod === "upi" ? "2px solid #3b82f6" : "1px solid rgba(255,255,255,0.15)",
+                          background: walkinPaymentMethod === "upi" ? "rgba(59, 130, 246, 0.2)" : "transparent",
+                          color: walkinPaymentMethod === "upi" ? "#3b82f6" : "inherit",
+                          cursor: "pointer"
+                        }}
+                      >
+                        📱 UPI QR
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setWalkinPaymentMethod("waived")}
+                        style={{
+                          padding: "6px 8px",
+                          borderRadius: "6px",
+                          fontSize: "12px",
+                          fontWeight: "700",
+                          border: walkinPaymentMethod === "waived" ? "2px solid #8b5cf6" : "1px solid rgba(255,255,255,0.15)",
+                          background: walkinPaymentMethod === "waived" ? "rgba(139, 92, 246, 0.2)" : "transparent",
+                          color: walkinPaymentMethod === "waived" ? "#8b5cf6" : "inherit",
+                          cursor: "pointer"
+                        }}
+                      >
+                        🎁 Waived
+                      </button>
+                    </div>
+
+                    {walkinPaymentMethod === "upi" && (
+                      <div style={{ textAlign: "center", background: "#ffffff", padding: "10px", borderRadius: "8px" }}>
+                        <img
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(
+                            `upi://pay?pa=queueless@upi&pn=QueueLess&am=${fee}&cu=INR`
+                          )}`}
+                          alt="Counter UPI QR"
+                          style={{ width: "110px", height: "110px", display: "inline-block" }}
+                        />
+                        <div style={{ color: "#1e293b", fontSize: "11.5px", fontWeight: "700", marginTop: "3px" }}>
+                          Ask customer to scan with PhonePe / GPay (₹{fee})
+                        </div>
+                      </div>
+                    )}
+
+                    <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "12.5px", fontWeight: "600" }}>
+                      <input
+                        type="checkbox"
+                        checked={walkinPaymentConfirmed}
+                        onChange={(e) => setWalkinPaymentConfirmed(e.target.checked)}
+                        style={{ width: "16px", height: "16px", accentColor: "#10b981", cursor: "pointer" }}
+                      />
+                      <span>
+                        {isWaived
+                          ? "Confirm Fee Waived / Free Token"
+                          : `Confirm ₹${fee} received from customer (${walkinPaymentMethod.toUpperCase()})`}
+                      </span>
+                    </label>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={actionLoading || !canIssue}
+                    style={{
+                      marginTop: "12px",
+                      width: "100%",
+                      padding: "10px",
+                      borderRadius: "8px",
+                      fontWeight: "700",
+                      background: !canIssue ? "#475569" : "#10b981",
+                      cursor: !canIssue ? "not-allowed" : "pointer",
+                      border: "none",
+                      color: "#ffffff"
+                    }}
+                  >
+                    {actionLoading
+                      ? "Generating..."
+                      : !canIssue
+                      ? `🔒 Collect ₹${fee} to Issue Token`
+                      : "✓ Payment Confirmed - Generate Token"}
                   </button>
-                </div>
-              </form>
-            )}
+                </form>
+              );
+            })()}
 
             {/* Waiting Queue Table */}
             <div className="waiting-table-wrap">
@@ -423,6 +583,18 @@ export default function StaffPortal() {
                           </td>
                           <td>
                             <strong>{item.customerName}</strong>
+                            <div style={{ marginTop: "2px" }}>
+                              <span style={{
+                                fontSize: "10px",
+                                fontWeight: "700",
+                                padding: "1px 6px",
+                                borderRadius: "4px",
+                                background: item.paymentStatus === "waived" ? "rgba(139, 92, 246, 0.2)" : "rgba(16, 185, 129, 0.2)",
+                                color: item.paymentStatus === "waived" ? "#8b5cf6" : "#10b981",
+                              }}>
+                                {item.paymentStatus === "waived" ? "WAIVED" : `PAID ₹${item.paidAmount || item.serviceFee || 100} (${(item.paymentMethod || "cash").toUpperCase()})`}
+                              </span>
+                            </div>
                             {idx === 0 && <span className="next-tag">NEXT</span>}
                           </td>
                           <td>{waitMinutes} min ago</td>

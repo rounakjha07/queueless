@@ -612,7 +612,7 @@
 /* ================= KPI CARDS ================= */
 .qd-kpi-modern-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 20px;
 }
 
@@ -646,6 +646,7 @@
 .amber-glow::before { background: var(--accent-amber); }
 .green-glow::before { background: var(--accent-green); }
 .blue-glow::before { background: var(--accent-blue); }
+.emerald-glow::before { background: #10b981; }
 
 .kpi-card-header {
   display: flex;

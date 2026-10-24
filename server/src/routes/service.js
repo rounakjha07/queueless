@@ -29,7 +29,7 @@ router.get("/", protect, async (req, res) => {
 
         // Fallback for staff if service doc wasn't found under that exact query
         if (req.user.role === "staff" && staffAssignedService && services.length === 0) {
-            services = [{ name: staffAssignedService, _id: "allotted" }];
+            services = [{ name: staffAssignedService, _id: "allotted", price: 100 }];
         }
 
         res.json({ success: true, services, assignedService: staffAssignedService });
@@ -79,8 +79,11 @@ router.post("/", protect, async (req, res) => {
             });
         }
 
+        const price = typeof req.body.price !== "undefined" ? Math.max(0, Number(req.body.price) || 0) : 100;
+
         const service = await Service.create({
             name,
+            price,
             description: req.body.description?.trim() || "",
             category: req.body.category?.trim() || "General",
             estimatedServiceMinutes: Number(req.body.estimatedServiceMinutes) || 10,
@@ -111,7 +114,64 @@ router.post("/", protect, async (req, res) => {
     }
 });
 
- // Delete a service (Managers only)
+// Update a service (Managers only)
+router.put("/:id", protect, async (req, res) => {
+    try {
+        if (req.user.role !== "manager") {
+            return res.status(403).json({
+                success: false,
+                message: "Only the Service Provider Head can update services.",
+            });
+        }
+
+        const service = await Service.findOne({
+            _id: req.params.id,
+            createdBy: req.user.id,
+        });
+
+        if (!service) {
+            return res.status(404).json({
+                success: false,
+                message: "Service not found",
+            });
+        }
+
+        if (typeof req.body.name === "string" && req.body.name.trim()) {
+            service.name = req.body.name.trim();
+        }
+        if (typeof req.body.price !== "undefined") {
+            service.price = Math.max(0, Number(req.body.price) || 0);
+        }
+        if (typeof req.body.estimatedServiceMinutes !== "undefined") {
+            service.estimatedServiceMinutes = Math.max(1, Number(req.body.estimatedServiceMinutes) || 10);
+        }
+        if (typeof req.body.description === "string") {
+            service.description = req.body.description.trim();
+        }
+        if (typeof req.body.category === "string" && req.body.category.trim()) {
+            service.category = req.body.category.trim();
+        }
+        if (typeof req.body.operatingHours === "string") {
+            service.operatingHours = req.body.operatingHours.trim();
+        }
+
+        await service.save();
+
+        return res.json({
+            success: true,
+            message: "Service updated successfully",
+            service,
+        });
+    } catch (error) {
+        console.error("Update service error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to update service",
+        });
+    }
+});
+
+// Delete a service (Managers only)
 router.delete("/:id", protect, async (req, res) => {
     try {
         if (req.user.role !== "manager") {
@@ -167,6 +227,5 @@ router.delete("/:id", protect, async (req, res) => {
         });
     }
 });
-
 
 export default router;

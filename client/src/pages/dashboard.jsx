@@ -61,10 +61,14 @@ function Dashboard() {
     const [customerPhone, setCustomerPhone] = useState("");
     const [serviceName, setServiceName] = useState("");
     const [addingCustomer, setAddingCustomer] = useState(false);
+    const [walkinPaymentMethod, setWalkinPaymentMethod] = useState("cash"); // "cash" | "upi" | "waived"
+    const [walkinPaymentConfirmed, setWalkinPaymentConfirmed] = useState(false);
 
     // Services state
     const [services, setServices] = useState([]);
+    const [serviceObjects, setServiceObjects] = useState([]);
     const [newServiceName, setNewServiceName] = useState("");
+    const [newServicePrice, setNewServicePrice] = useState(100);
     const [serviceLoading, setServiceLoading] = useState(false);
     const [serviceMessage, setServiceMessage] = useState("");
 
@@ -158,7 +162,9 @@ function Dashboard() {
             });
             const data = await response.json();
             if (response.ok) {
-                const serviceNames = (data.services || []).map((service) => service.name);
+                const srvList = data.services || [];
+                setServiceObjects(srvList);
+                const serviceNames = srvList.map((service) => service.name);
                 setServices(serviceNames);
                 if (user?.role === "staff" && user?.assignedService) {
                     setServiceName(user.assignedService);
@@ -421,11 +427,12 @@ function Dashboard() {
                 method: "POST",
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name }),
+                body: JSON.stringify({ name, price: Number(newServicePrice) || 100 }),
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || "Failed to add service");
             setNewServiceName("");
+            setNewServicePrice(100);
             setServiceMessage("Service added successfully!");
             await fetchServices();
         } catch (err) {
@@ -467,6 +474,16 @@ function Dashboard() {
             : serviceName;
 
         if (!customerName.trim() || !activeServiceName.trim()) return;
+
+        const currentSrvObj = serviceObjects.find((s) => s.name === activeServiceName);
+        const currentFee = currentSrvObj?.price !== undefined ? currentSrvObj.price : 100;
+        const isWaived = walkinPaymentMethod === "waived";
+
+        if (currentFee > 0 && !isWaived && !walkinPaymentConfirmed) {
+            alert(`Payment of ₹${currentFee} must be collected and confirmed before issuing token.`);
+            return;
+        }
+
         setAddingCustomer(true);
         try {
             const response = await fetch(`${API_BASE}/api/queue`, {
@@ -477,12 +494,18 @@ function Dashboard() {
                     customerName: customerName.trim(),
                     customerPhone: customerPhone.trim(),
                     serviceName: activeServiceName,
+                    paidAmount: isWaived ? 0 : currentFee,
+                    paymentStatus: isWaived ? "waived" : "paid",
+                    paymentMethod: walkinPaymentMethod,
+                    paymentRef: walkinPaymentMethod === "cash" ? `CASH-${Date.now().toString().slice(-6)}` : `UPI-${Date.now().toString().slice(-6)}`,
                 }),
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || "Failed to add customer");
             setCustomerName("");
             setCustomerPhone("");
+            setWalkinPaymentConfirmed(false);
+            setWalkinPaymentMethod("cash");
             setShowAddCustomer(false);
             await fetchQueue();
             await fetchStats();
@@ -946,66 +969,195 @@ function Dashboard() {
                     )}
 
                     {/* Add Walk-in Modal Form */}
-                    {showAddCustomer && (
-                        <div className="qd-modal-card">
-                            <div className="modal-header">
-                                <h3>Generate Token for Walk-in Customer</h3>
-                                <button className="modal-close" onClick={() => setShowAddCustomer(false)}>✕</button>
-                            </div>
-                            <form onSubmit={handleAddCustomer} className="modal-form-grid">
-                                <input
-                                    type="text"
-                                    placeholder="Customer Full Name"
-                                    value={customerName}
-                                    onChange={(e) => setCustomerName(e.target.value)}
-                                    required
-                                    autoFocus
-                                />
-                                <input
-                                    type="tel"
-                                    placeholder="Phone Number (optional)"
-                                    value={customerPhone}
-                                    onChange={(e) => setCustomerPhone(e.target.value)}
-                                />
+                    {showAddCustomer && (() => {
+                        const activeSrvName = (isStaff && user?.assignedService) ? user.assignedService : serviceName;
+                        const currentSrvObj = serviceObjects.find((s) => s.name === activeSrvName);
+                        const currentFee = currentSrvObj?.price !== undefined ? currentSrvObj.price : 100;
+                        const canSubmit = addingCustomer || (isStaff || services.length > 0) && (walkinPaymentMethod === "waived" || currentFee === 0 || walkinPaymentConfirmed);
 
-                                {isStaff && user?.assignedService ? (
-                                    <div className="qd-staff-allotted-card">
-                                        <div>
-                                            <span className="qd-staff-allotted-label">
-                                                Your Allotted Department
+                        return (
+                            <div className="qd-modal-card">
+                                <div className="modal-header">
+                                    <div>
+                                        <h3 style={{ margin: 0 }}>Generate Token for Walk-in Customer</h3>
+                                        <p style={{ margin: "2px 0 0", fontSize: "12px", color: "var(--text-muted)" }}>
+                                            Verify customer payment before issuing a live token
+                                        </p>
+                                    </div>
+                                    <button className="modal-close" onClick={() => setShowAddCustomer(false)}>✕</button>
+                                </div>
+                                <form onSubmit={handleAddCustomer} className="modal-form-grid">
+                                    <input
+                                        type="text"
+                                        placeholder="Customer Full Name"
+                                        value={customerName}
+                                        onChange={(e) => setCustomerName(e.target.value)}
+                                        required
+                                        autoFocus
+                                    />
+                                    <input
+                                        type="tel"
+                                        placeholder="Phone Number (optional)"
+                                        value={customerPhone}
+                                        onChange={(e) => setCustomerPhone(e.target.value)}
+                                    />
+
+                                    {isStaff && user?.assignedService ? (
+                                        <div className="qd-staff-allotted-card">
+                                            <div>
+                                                <span className="qd-staff-allotted-label">
+                                                    Your Allotted Department
+                                                </span>
+                                                <strong className="qd-staff-allotted-value">
+                                                    🏢 {user.assignedService} (Fee: ₹{currentFee})
+                                                </strong>
+                                            </div>
+                                            <span className="qd-staff-allotted-badge">
+                                                Auto-Assigned
                                             </span>
-                                            <strong className="qd-staff-allotted-value">
-                                                🏢 {user.assignedService}
+                                        </div>
+                                    ) : (
+                                        <select
+                                            value={serviceName}
+                                            onChange={(e) => setServiceName(e.target.value)}
+                                            required
+                                            disabled={services.length === 0}
+                                        >
+                                            <option value="" disabled>Select Department / Service</option>
+                                            {services.map((srv) => {
+                                                const obj = serviceObjects.find((s) => s.name === srv);
+                                                const fee = obj?.price !== undefined ? obj.price : 100;
+                                                return (
+                                                    <option key={srv} value={srv}>
+                                                        {srv} — ₹{fee}
+                                                    </option>
+                                                );
+                                            })}
+                                        </select>
+                                    )}
+
+                                    {/* Pre-Payment Requirement Box */}
+                                    <div style={{
+                                        background: "rgba(16, 185, 129, 0.07)",
+                                        border: "1px solid rgba(16, 185, 129, 0.3)",
+                                        borderRadius: "12px",
+                                        padding: "14px 16px",
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        gap: "10px"
+                                    }}>
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                            <span style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-muted)" }}>
+                                                💰 Service Fee Required:
+                                            </span>
+                                            <strong style={{ fontSize: "17px", color: "#10b981", fontWeight: "800" }}>
+                                                ₹{walkinPaymentMethod === "waived" ? 0 : currentFee}
                                             </strong>
                                         </div>
-                                        <span className="qd-staff-allotted-badge">
-                                            Auto-Assigned
-                                        </span>
-                                    </div>
-                                ) : (
-                                    <select
-                                        value={serviceName}
-                                        onChange={(e) => setServiceName(e.target.value)}
-                                        required
-                                        disabled={services.length === 0}
-                                    >
-                                        <option value="" disabled>Select Department / Service</option>
-                                        {services.map((srv) => (
-                                            <option key={srv} value={srv}>{srv}</option>
-                                        ))}
-                                    </select>
-                                )}
 
-                                <button
-                                    type="submit"
-                                    className="submit-token-btn"
-                                    disabled={addingCustomer || (!isStaff && services.length === 0)}
-                                >
-                                    {addingCustomer ? "Issuing..." : "Generate Token Now →"}
-                                </button>
-                            </form>
-                        </div>
-                    )}
+                                        {/* Payment Mode Selector Tabs */}
+                                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => setWalkinPaymentMethod("cash")}
+                                                style={{
+                                                    padding: "8px 10px",
+                                                    borderRadius: "8px",
+                                                    fontSize: "12.5px",
+                                                    fontWeight: "700",
+                                                    border: walkinPaymentMethod === "cash" ? "2px solid #10b981" : "1px solid var(--border-subtle)",
+                                                    background: walkinPaymentMethod === "cash" ? "rgba(16, 185, 129, 0.18)" : "transparent",
+                                                    color: walkinPaymentMethod === "cash" ? "#10b981" : "var(--text-main)",
+                                                    cursor: "pointer"
+                                                }}
+                                            >
+                                                💵 Cash
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setWalkinPaymentMethod("upi")}
+                                                style={{
+                                                    padding: "8px 10px",
+                                                    borderRadius: "8px",
+                                                    fontSize: "12.5px",
+                                                    fontWeight: "700",
+                                                    border: walkinPaymentMethod === "upi" ? "2px solid #3b82f6" : "1px solid var(--border-subtle)",
+                                                    background: walkinPaymentMethod === "upi" ? "rgba(59, 130, 246, 0.18)" : "transparent",
+                                                    color: walkinPaymentMethod === "upi" ? "#3b82f6" : "var(--text-main)",
+                                                    cursor: "pointer"
+                                                }}
+                                            >
+                                                📱 UPI QR
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setWalkinPaymentMethod("waived")}
+                                                style={{
+                                                    padding: "8px 10px",
+                                                    borderRadius: "8px",
+                                                    fontSize: "12.5px",
+                                                    fontWeight: "700",
+                                                    border: walkinPaymentMethod === "waived" ? "2px solid #8b5cf6" : "1px solid var(--border-subtle)",
+                                                    background: walkinPaymentMethod === "waived" ? "rgba(139, 92, 246, 0.18)" : "transparent",
+                                                    color: walkinPaymentMethod === "waived" ? "#8b5cf6" : "var(--text-main)",
+                                                    cursor: "pointer"
+                                                }}
+                                            >
+                                                🎁 Waive Fee
+                                            </button>
+                                        </div>
+
+                                        {/* UPI Dynamic QR Preview */}
+                                        {walkinPaymentMethod === "upi" && (
+                                            <div style={{ textAlign: "center", background: "#ffffff", padding: "12px", borderRadius: "10px", margin: "4px 0" }}>
+                                                <img
+                                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(
+                                                        `upi://pay?pa=queueless@upi&pn=${encodeURIComponent(user?.businessName || user?.name || "QueueLess")}&am=${currentFee}&cu=INR`
+                                                    )}`}
+                                                    alt="UPI Scan QR"
+                                                    style={{ width: "130px", height: "130px", display: "inline-block" }}
+                                                />
+                                                <div style={{ fontSize: "12px", color: "#1e293b", fontWeight: "600", marginTop: "4px" }}>
+                                                    Customer scans with GPay / PhonePe / Paytm (₹{currentFee})
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Confirmation Checkbox */}
+                                        <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", fontSize: "13px", fontWeight: "600", color: "var(--text-main)" }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={walkinPaymentConfirmed}
+                                                onChange={(e) => setWalkinPaymentConfirmed(e.target.checked)}
+                                                style={{ width: "17px", height: "17px", accentColor: "#10b981", cursor: "pointer" }}
+                                            />
+                                            <span>
+                                                {walkinPaymentMethod === "waived"
+                                                    ? "Confirm Fee Waived / Authorized Free Token"
+                                                    : `Confirm ₹${currentFee} payment received in ${walkinPaymentMethod.toUpperCase()} from customer`}
+                                            </span>
+                                        </label>
+                                    </div>
+
+                                    <button
+                                        type="submit"
+                                        className="submit-token-btn"
+                                        disabled={addingCustomer || !canSubmit}
+                                        style={{
+                                            background: !canSubmit ? "#475569" : undefined,
+                                            cursor: !canSubmit ? "not-allowed" : "pointer"
+                                        }}
+                                    >
+                                        {addingCustomer
+                                            ? "Issuing..."
+                                            : !canSubmit
+                                            ? `🔒 Collect ₹${currentFee} Payment to Generate Token`
+                                            : "✓ Payment Confirmed - Generate Token Now →"}
+                                    </button>
+                                </form>
+                            </div>
+                        );
+                    })()}
 
                     {/* Shuffle / Reassign Staff Modal */}
                     {reassignModalOpen && reassignStaffTarget && (
@@ -1260,6 +1412,18 @@ function Dashboard() {
                                         <span>Live dynamic calculation</span>
                                     </div>
                                 </article>
+
+                                <article className="qd-kpi-card emerald-glow">
+                                    <div className="kpi-card-header">
+                                        <span className="kpi-title">{timeRange === "today" ? "Revenue Collected" : "Total Revenue"}</span>
+                                        <span className="kpi-icon-pill">💰</span>
+                                    </div>
+                                    <div className="kpi-number-display">₹{activeStats.totalRevenue || 0}</div>
+                                    <div className="kpi-subtext" style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
+                                        <span>💵 Cash: ₹{activeStats.cashRevenue || 0}</span>
+                                        <span>📱 UPI: ₹{activeStats.upiRevenue || 0}</span>
+                                    </div>
+                                </article>
                             </section>
 
                             {/* Analytics Visual Grid */}
@@ -1435,7 +1599,24 @@ function Dashboard() {
                                                         <strong className="customer-cell-name">{item.customerName}</strong>
                                                         {item.customerPhone && <span className="customer-cell-phone">{item.customerPhone}</span>}
                                                     </td>
-                                                    <td>{item.serviceName}</td>
+                                                    <td>
+                                                        <div>{item.serviceName}</div>
+                                                        <span style={{
+                                                            display: "inline-block",
+                                                            marginTop: "4px",
+                                                            fontSize: "11px",
+                                                            fontWeight: "700",
+                                                            padding: "2px 8px",
+                                                            borderRadius: "6px",
+                                                            background: item.paymentStatus === "waived" ? "rgba(139, 92, 246, 0.15)" : "rgba(16, 185, 129, 0.15)",
+                                                            color: item.paymentStatus === "waived" ? "#8b5cf6" : "#10b981",
+                                                            border: item.paymentStatus === "waived" ? "1px solid rgba(139, 92, 246, 0.3)" : "1px solid rgba(16, 185, 129, 0.3)"
+                                                        }}>
+                                                            {item.paymentStatus === "waived"
+                                                                ? "🎁 WAIVED"
+                                                                : `✓ PAID ₹${item.paidAmount !== undefined ? item.paidAmount : (item.serviceFee || 100)} (${(item.paymentMethod || "cash").toUpperCase()})`}
+                                                        </span>
+                                                    </td>
                                                     <td>{item.counterNumber || "-"}</td>
                                                     <td>
                                                         {item.status === "waiting" && (
@@ -1742,7 +1923,24 @@ function Dashboard() {
                                                     </td>
                                                     <td><strong>{item.customerName}</strong></td>
                                                     <td>{item.customerPhone || "-"}</td>
-                                                    <td>{item.serviceName}</td>
+                                                    <td>
+                                                        <div>{item.serviceName}</div>
+                                                        <span style={{
+                                                            display: "inline-block",
+                                                            marginTop: "4px",
+                                                            fontSize: "11px",
+                                                            fontWeight: "700",
+                                                            padding: "2px 8px",
+                                                            borderRadius: "6px",
+                                                            background: item.paymentStatus === "waived" ? "rgba(139, 92, 246, 0.15)" : "rgba(16, 185, 129, 0.15)",
+                                                            color: item.paymentStatus === "waived" ? "#8b5cf6" : "#10b981",
+                                                            border: item.paymentStatus === "waived" ? "1px solid rgba(139, 92, 246, 0.3)" : "1px solid rgba(16, 185, 129, 0.3)"
+                                                        }}>
+                                                            {item.paymentStatus === "waived"
+                                                                ? "🎁 WAIVED"
+                                                                : `✓ PAID ₹${item.paidAmount !== undefined ? item.paidAmount : (item.serviceFee || 100)} (${(item.paymentMethod || "cash").toUpperCase()})`}
+                                                        </span>
+                                                    </td>
                                                     <td>{new Date(item.createdAt).toLocaleString()}</td>
                                                     <td>
                                                         <span className={`status-pill-badge ${item.status}`}>
@@ -1769,7 +1967,7 @@ function Dashboard() {
                             </div>
 
                             {!isStaff && (
-                                <form className="add-service-modern-form" onSubmit={handleAddService}>
+                                <form className="add-service-modern-form" onSubmit={handleAddService} style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                                     <input
                                         type="text"
                                         value={newServiceName}
@@ -1777,8 +1975,19 @@ function Dashboard() {
                                         placeholder="Enter new service name (e.g. Account Opening, Cash Deposit)"
                                         maxLength={100}
                                         required
+                                        style={{ flex: 3, minWidth: "200px" }}
                                     />
-                                    <button type="submit" disabled={serviceLoading}>
+                                    <input
+                                        type="number"
+                                        value={newServicePrice}
+                                        onChange={(e) => setNewServicePrice(e.target.value)}
+                                        placeholder="Fee (₹ INR)"
+                                        min="0"
+                                        required
+                                        title="Customer fee required to generate token"
+                                        style={{ flex: 1, minWidth: "110px", padding: "10px 14px", borderRadius: "10px", border: "1px solid var(--border-subtle)", background: "var(--bg-card)", color: "var(--text-main)" }}
+                                    />
+                                    <button type="submit" disabled={serviceLoading} style={{ flex: 1, minWidth: "140px" }}>
                                         {serviceLoading ? "Adding..." : "+ Create Service"}
                                     </button>
                                 </form>
@@ -1794,6 +2003,9 @@ function Dashboard() {
                                 {services.map((srv) => {
                                     const waitingCount = activeDataset.filter((q) => q.serviceName === srv && q.status === "waiting").length;
                                     const totalCount = activeDataset.filter((q) => q.serviceName === srv).length;
+                                    const srvObj = serviceObjects.find((s) => s.name === srv);
+                                    const srvPrice = srvObj?.price !== undefined ? srvObj.price : 100;
+
                                     return (
                                         <div key={srv} className="service-card-modern">
                                             <div className="service-card-top">
@@ -1809,6 +2021,10 @@ function Dashboard() {
                                                 )}
                                             </div>
                                             <div className="service-metrics-row">
+                                                <div className="srv-stat">
+                                                    <span>Fee</span>
+                                                    <strong style={{ color: "#10b981" }}>₹{srvPrice}</strong>
+                                                </div>
                                                 <div className="srv-stat">
                                                     <span>Waiting</span>
                                                     <strong className="amber-text">{waitingCount}</strong>

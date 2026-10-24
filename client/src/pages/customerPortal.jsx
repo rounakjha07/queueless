@@ -22,6 +22,10 @@ export default function CustomerPortal() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [activeModalService, setActiveModalService] = useState(null);
   const [bookingLoading, setBookingLoading] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentService, setPaymentService] = useState(null);
+  const [paymentMode, setPaymentMode] = useState("upi"); // "upi" | "card"
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
   // OTP Login states (when customer is not logged in)
   const [tokenInput, setTokenInput] = useState("");
@@ -296,18 +300,35 @@ export default function CustomerPortal() {
     }
   }
 
-  // Handle Digital Token Booking
-  async function handleBookToken(service) {
+  // Open payment dialog before booking token
+  function openBookingPayment(service) {
+    if (!service) return;
+    setPaymentService(service);
+    setPaymentMode("upi");
+    setShowPaymentModal(true);
+  }
+
+  // Process payment and finalize token booking
+  async function handleProcessPaymentAndBook() {
+    if (!paymentService) return;
+    setIsProcessingPayment(true);
     setBookingLoading(true);
     setFeedbackMsg("");
+
+    const fee = typeof paymentService.price === "number" ? paymentService.price : 100;
+    const paymentRef = `${paymentMode.toUpperCase()}-${Date.now().toString().slice(-8)}`;
+
     try {
       const res = await fetch(`${API_BASE}/api/queue/book`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          serviceName: service.name,
-          managerId: service.managerId,
+          serviceName: paymentService.name,
+          managerId: paymentService.managerId,
+          paidAmount: fee,
+          paymentMethod: paymentMode,
+          paymentRef,
         }),
       });
 
@@ -316,13 +337,17 @@ export default function CustomerPortal() {
         throw new Error(data.message || "Failed to book token.");
       }
 
-      setFeedbackMsg(`✓ Token #${data.queue.tokenNumber} issued successfully for ${service.name}!`);
+      setFeedbackMsg(`✓ Payment of ₹${fee} successful! Token #${data.queue.tokenNumber} issued.`);
+      setShowPaymentModal(false);
+      setPaymentService(null);
       setActiveModalService(null);
       await fetchLiveStatus();
       await fetchExploreServices();
     } catch (err) {
+      alert("Payment & Booking Error: " + err.message);
       setFeedbackMsg("⚠️ " + err.message);
     } finally {
+      setIsProcessingPayment(false);
       setBookingLoading(false);
     }
   }
@@ -774,6 +799,26 @@ export default function CustomerPortal() {
                 <span style={{ fontSize: "12px", color: "#64748b", marginTop: "4px", display: "block" }}>
                   Customer: <b>{liveToken.customerName}</b> ({liveToken.customerPhone || user.phone})
                 </span>
+
+                {/* Paid Receipt Verification Badge */}
+                <div style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  marginTop: "10px",
+                  background: liveToken.paymentStatus === "waived" ? "rgba(139, 92, 246, 0.15)" : "rgba(16, 185, 129, 0.15)",
+                  border: liveToken.paymentStatus === "waived" ? "1px solid #8b5cf6" : "1px solid #10b981",
+                  padding: "4px 14px",
+                  borderRadius: "20px",
+                  fontSize: "12.5px",
+                  fontWeight: "700",
+                  color: liveToken.paymentStatus === "waived" ? "#8b5cf6" : "#10b981"
+                }}>
+                  <span>{liveToken.paymentStatus === "waived" ? "🎁 FEE WAIVED" : `✓ PAID ₹${liveToken.paidAmount || liveToken.serviceFee || 100} (${(liveToken.paymentMethod || "online").toUpperCase()})`}</span>
+                  <span style={{ fontSize: "10.5px", opacity: 0.8, borderLeft: "1px solid currentColor", paddingLeft: "6px" }}>
+                    Ref: {liveToken.paymentRef || "VERIFIED"}
+                  </span>
+                </div>
               </div>
 
               {/* Progress & Live Telemetry Info */}
@@ -953,7 +998,12 @@ export default function CustomerPortal() {
                         <span className="cust-provider-name-tag">
                           🏢 {srv.providerName}
                         </span>
-                        <span className="cust-category-badge">{srv.category}</span>
+                        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                          <span style={{ fontSize: "12px", background: "rgba(16, 185, 129, 0.15)", color: "#10b981", fontWeight: "800", padding: "2px 8px", borderRadius: "8px" }}>
+                            ₹{srv.price ?? 100}
+                          </span>
+                          <span className="cust-category-badge">{srv.category}</span>
+                        </div>
                       </div>
 
                       <h3 className="cust-service-title">{srv.name}</h3>
@@ -999,9 +1049,9 @@ export default function CustomerPortal() {
                         type="button"
                         className="cust-quick-book-btn"
                         disabled={bookingLoading || alreadyBooked}
-                        onClick={() => handleBookToken(srv)}
+                        onClick={() => openBookingPayment(srv)}
                       >
-                        {alreadyBooked ? "✓ In Line" : "🎫 Book Token"}
+                        {alreadyBooked ? "✓ In Line" : `🎫 Book Token (₹${srv.price ?? 100})`}
                       </button>
                     </div>
                   </div>
@@ -1080,6 +1130,12 @@ export default function CustomerPortal() {
                   <strong style={{ fontSize: "16px" }}>{activeModalService.waitingCount} in line</strong>
                 </div>
                 <div>
+                  <span>Service Fee</span>
+                  <strong style={{ fontSize: "16px", color: "#10b981" }}>
+                    ₹{activeModalService.price ?? 100}
+                  </strong>
+                </div>
+                <div>
                   <span>Operating Hours</span>
                   <strong style={{ fontSize: "14px", color: "#475569" }}>
                     {activeModalService.operatingHours || "09:00 AM - 06:00 PM"}
@@ -1117,18 +1173,158 @@ export default function CustomerPortal() {
                   className="cust-submit-btn"
                   style={{ flex: 1 }}
                   disabled={bookingLoading || (liveToken && liveToken.serviceName === activeModalService.name)}
-                  onClick={() => handleBookToken(activeModalService)}
+                  onClick={() => openBookingPayment(activeModalService)}
                 >
                   {bookingLoading
                     ? "Issuing Token..."
                     : liveToken && liveToken.serviceName === activeModalService.name
                     ? "✓ You Already Have an Active Token"
-                    : "🎫 Book Digital Token Now"}
+                    : `🎫 Pay ₹${activeModalService.price ?? 100} & Book Digital Token`}
                 </button>
               </div>
             </div>
           </div>
         )}
+
+        {/* Payment & Token Booking Modal */}
+        {showPaymentModal && paymentService && (() => {
+          const fee = typeof paymentService.price === "number" ? paymentService.price : 100;
+          const upiPayUrl = `upi://pay?pa=queueless@upi&pn=${encodeURIComponent(paymentService.providerName || "QueueLess")}&am=${fee}&cu=INR`;
+
+          return (
+            <div className="cust-modal-backdrop" onClick={() => !isProcessingPayment && setShowPaymentModal(false)}>
+              <div className="cust-modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "460px" }}>
+                <div className="cust-modal-header">
+                  <div>
+                    <span style={{ fontSize: "11px", color: "#10b981", textTransform: "uppercase", fontWeight: "800", letterSpacing: "0.5px" }}>
+                      STEP 2 OF 2: SECURE PRE-PAYMENT
+                    </span>
+                    <h2 style={{ margin: "2px 0 0", fontSize: "19px", color: "var(--cust-text-main, #0f172a)" }}>
+                      Pay ₹{fee} & Get Token
+                    </h2>
+                  </div>
+                  <button
+                    className="cust-modal-close-btn"
+                    disabled={isProcessingPayment}
+                    onClick={() => setShowPaymentModal(false)}
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div style={{ background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.25)", borderRadius: "12px", padding: "12px 16px", margin: "14px 0" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                    <span style={{ fontSize: "12.5px", color: "#64748b" }}>Service:</span>
+                    <strong style={{ fontSize: "13px" }}>{paymentService.name}</strong>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                    <span style={{ fontSize: "12.5px", color: "#64748b" }}>Provider:</span>
+                    <span style={{ fontSize: "13px", fontWeight: "600" }}>{paymentService.providerName}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px dashed rgba(16, 185, 129, 0.3)", paddingTop: "6px", marginTop: "6px" }}>
+                    <span style={{ fontSize: "13px", fontWeight: "700" }}>Total Amount to Pay:</span>
+                    <strong style={{ fontSize: "18px", color: "#10b981" }}>₹{fee}</strong>
+                  </div>
+                </div>
+
+                {/* Payment Option Tabs */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "16px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMode("upi")}
+                    style={{
+                      padding: "10px",
+                      borderRadius: "10px",
+                      fontSize: "13px",
+                      fontWeight: "700",
+                      border: paymentMode === "upi" ? "2px solid #10b981" : "1px solid #cbd5e1",
+                      background: paymentMode === "upi" ? "rgba(16, 185, 129, 0.12)" : "transparent",
+                      color: paymentMode === "upi" ? "#10b981" : "inherit",
+                      cursor: "pointer"
+                    }}
+                  >
+                    📱 UPI / QR Code
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMode("card")}
+                    style={{
+                      padding: "10px",
+                      borderRadius: "10px",
+                      fontSize: "13px",
+                      fontWeight: "700",
+                      border: paymentMode === "card" ? "2px solid #3b82f6" : "1px solid #cbd5e1",
+                      background: paymentMode === "card" ? "rgba(59, 130, 246, 0.12)" : "transparent",
+                      color: paymentMode === "card" ? "#3b82f6" : "inherit",
+                      cursor: "pointer"
+                    }}
+                  >
+                    💳 Card / NetBanking
+                  </button>
+                </div>
+
+                {/* UPI Mode View */}
+                {paymentMode === "upi" ? (
+                  <div style={{ textAlign: "center", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "16px", marginBottom: "16px" }}>
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(upiPayUrl)}`}
+                      alt="UPI QR"
+                      style={{ width: "140px", height: "140px", display: "inline-block", borderRadius: "8px", border: "1px solid #cbd5e1" }}
+                    />
+                    <div style={{ fontSize: "12.5px", color: "#1e293b", fontWeight: "700", marginTop: "8px" }}>
+                      Scan with any UPI App: GPay, PhonePe, Paytm
+                    </div>
+                    <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
+                      UPI ID: <span style={{ fontFamily: "monospace", fontWeight: "600", color: "#2563eb" }}>queueless@upi</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "14px", marginBottom: "16px", fontSize: "12.5px" }}>
+                    <div style={{ marginBottom: "8px" }}>
+                      <label style={{ display: "block", color: "#64748b", fontSize: "11px", marginBottom: "2px" }}>Card Number</label>
+                      <input
+                        type="text"
+                        readOnly
+                        value="4532 •••• •••• 8892"
+                        style={{ width: "100%", padding: "8px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", background: "#ffffff", fontWeight: "600" }}
+                      />
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                      <div>
+                        <label style={{ display: "block", color: "#64748b", fontSize: "11px", marginBottom: "2px" }}>Expiry</label>
+                        <input
+                          type="text"
+                          readOnly
+                          value="12/28"
+                          style={{ width: "100%", padding: "8px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", background: "#ffffff", fontWeight: "600" }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: "block", color: "#64748b", fontSize: "11px", marginBottom: "2px" }}>CVV</label>
+                        <input
+                          type="password"
+                          readOnly
+                          value="742"
+                          style={{ width: "100%", padding: "8px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", background: "#ffffff", fontWeight: "600" }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  className="cust-submit-btn"
+                  style={{ width: "100%", padding: "12px", fontSize: "15px", fontWeight: "800", background: "#10b981", border: "none" }}
+                  disabled={isProcessingPayment}
+                  onClick={handleProcessPaymentAndBook}
+                >
+                  {isProcessingPayment ? "Verifying Payment & Issuing Token..." : `✓ Complete Payment of ₹${fee} & Issue Token`}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* 4. Past Tokens History */}
         {pastTokens.length > 0 && (

@@ -1,4 +1,3 @@
-
 import mongoose from "mongoose";
 
 const queueSchema = new mongoose.Schema(
@@ -47,6 +46,34 @@ const queueSchema = new mongoose.Schema(
     },
     completedAt: {
       type: Date,
+    },
+    // Payment details
+    serviceFee: {
+      type: Number,
+      default: 0,
+    },
+    paidAmount: {
+      type: Number,
+      default: 0,
+    },
+    paymentStatus: {
+      type: String,
+      enum: ["pending", "paid", "waived"],
+      default: "paid",
+    },
+    paymentMethod: {
+      type: String,
+      enum: ["cash", "upi", "card", "online", "waived", "free"],
+      default: "cash",
+    },
+    paymentRef: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    paidAt: {
+      type: Date,
+      default: Date.now,
     },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,

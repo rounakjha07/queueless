@@ -177,6 +177,11 @@ router.get("/stats", protect, async (req, res) => {
           ? Math.round(waitTimeSamples.reduce((sum, val) => sum + val, 0) / waitTimeSamples.length)
           : (waiting > 0 ? 5 : 0);
 
+      const paidQueues = queues.filter((item) => item.paymentStatus === "paid");
+      const totalRevenue = paidQueues.reduce((sum, item) => sum + (item.paidAmount || item.serviceFee || 0), 0);
+      const cashRevenue = paidQueues.filter((item) => item.paymentMethod === "cash").reduce((sum, item) => sum + (item.paidAmount || item.serviceFee || 0), 0);
+      const upiRevenue = paidQueues.filter((item) => item.paymentMethod === "upi" || item.paymentMethod === "online").reduce((sum, item) => sum + (item.paidAmount || item.serviceFee || 0), 0);
+
       return {
         totalCustomers: queues.length,
         waiting,
@@ -184,6 +189,9 @@ router.get("/stats", protect, async (req, res) => {
         completed,
         cancelled,
         averageWaitTime,
+        totalRevenue,
+        cashRevenue,
+        upiRevenue,
       };
     };
 
@@ -241,6 +249,7 @@ router.get("/explore", async (req, res) => {
         return {
           id: srv._id,
           name: srv.name,
+          price: typeof srv.price === "number" ? srv.price : 100,
           description: srv.description || "Fast, transparent, and responsive counter service with digital queue notifications.",
           category: srv.category || "General",
           estimatedServiceMinutes: srv.estimatedServiceMinutes || 10,
@@ -446,6 +455,16 @@ router.post("/book", protect, async (req, res) => {
     const tokenNumber = (latestQueue?.tokenNumber || 0) + 1;
     const estimatedWaitMinutes = waitingAhead * 5;
 
+    const serviceDoc = await Service.findOne({
+      createdBy: managerId,
+      name: {
+        $regex: `^${serviceName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+        $options: "i",
+      },
+    });
+    const fee = typeof serviceDoc?.price === "number" ? serviceDoc.price : 100;
+    const { paymentMethod = "upi", paymentRef, paidAmount } = req.body;
+
     const queue = await Queue.create({
       serviceName,
       tokenNumber,
@@ -455,6 +474,12 @@ router.post("/book", protect, async (req, res) => {
       estimatedWaitMinutes,
       createdBy: new mongoose.Types.ObjectId(managerId),
       status: "waiting",
+      serviceFee: fee,
+      paidAmount: typeof paidAmount !== "undefined" ? Number(paidAmount) : fee,
+      paymentStatus: "paid",
+      paymentMethod: paymentMethod || "upi",
+      paymentRef: paymentRef || `UPI_${Date.now()}`,
+      paidAt: new Date(),
     });
 
     return res.status(201).json({
@@ -589,6 +614,12 @@ router.get("/track-public", async (req, res) => {
           city: token.createdBy?.city || "",
           phone: token.createdBy?.phone || "",
         },
+        serviceFee: token.serviceFee ?? 100,
+        paidAmount: token.paidAmount ?? (token.paymentStatus === "paid" ? (token.serviceFee ?? 100) : 0),
+        paymentStatus: token.paymentStatus || "paid",
+        paymentMethod: token.paymentMethod || "cash",
+        paymentRef: token.paymentRef || "VERIFIED",
+        paidAt: token.paidAt || token.createdAt,
         createdAt: token.createdAt,
       },
     });
@@ -762,6 +793,12 @@ router.get("/customer-live-status", protect, async (req, res) => {
           businessName: token.createdBy?.businessName || token.createdBy?.name || "Service Center",
           name: token.createdBy?.name,
         },
+        serviceFee: token.serviceFee ?? 100,
+        paidAmount: token.paidAmount ?? (token.paymentStatus === "paid" ? (token.serviceFee ?? 100) : 0),
+        paymentStatus: token.paymentStatus || "paid",
+        paymentMethod: token.paymentMethod || "cash",
+        paymentRef: token.paymentRef || "VERIFIED",
+        paidAt: token.paidAt || token.createdAt,
         currentlyServing: currentServing
           ? {
               tokenNumber: currentServing.tokenNumber,
@@ -854,7 +891,7 @@ router.get("/my-tokens", protect, async (req, res) => {
 // 6. Manager: Create a walk-in queue entry (Token Generation)
 router.post("/", protect, async (req, res) => {
   try {
-    const { serviceName, customerName, customerPhone } = req.body;
+    const { serviceName, customerName, customerPhone, paymentMethod = "cash", paymentStatus = "paid", paidAmount, paymentRef } = req.body;
     const normalizedServiceName = typeof serviceName === "string" ? serviceName.trim() : "";
     const normalizedCustomerName = typeof customerName === "string" ? customerName.trim() : "";
 
@@ -901,6 +938,19 @@ router.post("/", protect, async (req, res) => {
       createdAt: { $gte: startOfDay, $lt: endOfDay },
     });
 
+    const fee = typeof service.price === "number" ? service.price : 100;
+    const isPaid = paymentStatus === "paid";
+    const isWaived = paymentStatus === "waived";
+
+    if (fee > 0 && !isPaid && !isWaived) {
+      return res.status(400).json({
+        success: false,
+        message: `Token cannot be generated before payment. Please collect ₹${fee} from the customer first.`,
+      });
+    }
+
+    const finalAmount = isWaived ? 0 : (typeof paidAmount !== "undefined" ? Number(paidAmount) : fee);
+
     const queue = await Queue.create({
       serviceName: normalizedServiceName,
       customerName: normalizedCustomerName,
@@ -908,6 +958,12 @@ router.post("/", protect, async (req, res) => {
       tokenNumber: (latestQueue?.tokenNumber || 0) + 1,
       estimatedWaitMinutes: waitingAhead * 5,
       createdBy: new mongoose.Types.ObjectId(managerId),
+      serviceFee: fee,
+      paidAmount: finalAmount,
+      paymentStatus: isWaived ? "waived" : "paid",
+      paymentMethod: isWaived ? "waived" : (paymentMethod || "cash"),
+      paymentRef: paymentRef || (paymentMethod === "cash" ? "Cash Received at Counter" : "UPI Verified"),
+      paidAt: new Date(),
     });
 
     return res.status(201).json({

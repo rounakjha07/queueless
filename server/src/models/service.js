@@ -1,4 +1,3 @@
-
 import mongoose from "mongoose";
 
 const serviceSchema = new mongoose.Schema(
@@ -18,6 +17,11 @@ const serviceSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: "General",
+    },
+    price: {
+      type: Number,
+      default: 100,
+      min: 0,
     },
     estimatedServiceMinutes: {
       type: Number,
