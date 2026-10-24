@@ -1,3 +1,4 @@
+import { API_BASE } from "../config/api.js";
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -65,7 +66,7 @@ function Register() {
         setOtpLoading(true);
 
         try {
-            const res = await fetch("http://localhost:5000/api/auth/register/send-otp", {
+            const res = await fetch(`${API_BASE}/api/auth/register/send-otp`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ phone: cleanDigits.slice(-10) }),
@@ -105,7 +106,7 @@ function Register() {
         setOtpLoading(true);
 
         try {
-            const res = await fetch("http://localhost:5000/api/auth/register/verify-otp", {
+            const res = await fetch(`${API_BASE}/api/auth/register/verify-otp`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -171,7 +172,7 @@ function Register() {
             }
 
             const response = await fetch(
-                "http://localhost:5000/api/auth/register",
+                `${API_BASE}/api/auth/register`,
                 {
                     method: "POST",
                     headers: {

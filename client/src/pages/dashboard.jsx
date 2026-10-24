@@ -1,3 +1,4 @@
+import { API_BASE } from "../config/api.js";
 import QueueActivityChart from "./components/queueActivityChart";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -121,7 +122,7 @@ function Dashboard() {
 
     async function fetchQueue() {
         try {
-            const response = await fetch("http://localhost:5000/api/queue", {
+            const response = await fetch(`${API_BASE}/api/queue`, {
                 credentials: "include",
             });
             const data = await response.json();
@@ -137,7 +138,7 @@ function Dashboard() {
 
     async function fetchStats() {
         try {
-            const response = await fetch("http://localhost:5000/api/queue/stats", {
+            const response = await fetch(`${API_BASE}/api/queue/stats`, {
                 credentials: "include",
             });
             const data = await response.json();
@@ -152,7 +153,7 @@ function Dashboard() {
 
     async function fetchServices() {
         try {
-            const response = await fetch("http://localhost:5000/api/services", {
+            const response = await fetch(`${API_BASE}/api/services`, {
                 credentials: "include",
             });
             const data = await response.json();
@@ -173,7 +174,7 @@ function Dashboard() {
 
     async function fetchStaff() {
         try {
-            const response = await fetch("http://localhost:5000/api/staff", {
+            const response = await fetch(`${API_BASE}/api/staff`, {
                 credentials: "include",
             });
             const data = await response.json();
@@ -189,7 +190,7 @@ function Dashboard() {
     async function fetchAiInsights() {
         setAiInsightsLoading(true);
         try {
-            const res = await fetch("http://localhost:5000/api/ai/insights", {
+            const res = await fetch(`${API_BASE}/api/ai/insights`, {
                 credentials: "include",
             });
             const data = await res.json();
@@ -207,7 +208,7 @@ function Dashboard() {
     useEffect(() => {
         async function fetchUser() {
             try {
-                const response = await fetch("http://localhost:5000/api/auth/me", {
+                const response = await fetch(`${API_BASE}/api/auth/me`, {
                     credentials: "include",
                 });
                 const data = await response.json();
@@ -246,7 +247,7 @@ function Dashboard() {
         e.preventDefault();
         setSavingLocation(true);
         try {
-            const res = await fetch("http://localhost:5000/api/auth/provider-location", {
+            const res = await fetch(`${API_BASE}/api/auth/provider-location`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
@@ -282,7 +283,7 @@ function Dashboard() {
 
         async function fetchUserSilent() {
             try {
-                const res = await fetch("http://localhost:5000/api/auth/me", { credentials: "include" });
+                const res = await fetch(`${API_BASE}/api/auth/me`, { credentials: "include" });
                 const data = await res.json();
                 if (res.ok && data.user) {
                     setUser((prev) => {
@@ -326,7 +327,7 @@ function Dashboard() {
                 headers["x-openai-key"] = openAiKey;
             }
 
-            const res = await fetch("http://localhost:5000/api/ai/chat", {
+            const res = await fetch(`${API_BASE}/api/ai/chat`, {
                 method: "POST",
                 credentials: "include",
                 headers,
@@ -387,7 +388,7 @@ function Dashboard() {
     async function handleSeedDemoData() {
         setSeedingLoading(true);
         try {
-            const res = await fetch("http://localhost:5000/api/queue/seed-demo", {
+            const res = await fetch(`${API_BASE}/api/queue/seed-demo`, {
                 method: "POST",
                 credentials: "include",
             });
@@ -416,7 +417,7 @@ function Dashboard() {
         setServiceLoading(true);
         setServiceMessage("");
         try {
-            const response = await fetch("http://localhost:5000/api/services", {
+            const response = await fetch(`${API_BASE}/api/services`, {
                 method: "POST",
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
@@ -438,14 +439,14 @@ function Dashboard() {
     async function handleDeleteService(name) {
         if (!window.confirm(`Are you sure you want to delete "${name}"?`)) return;
         try {
-            const response = await fetch("http://localhost:5000/api/services", {
+            const response = await fetch(`${API_BASE}/api/services`, {
                 credentials: "include",
             });
             const data = await response.json();
             const service = (data.services || []).find((item) => item.name === name);
             if (!service) throw new Error("Service not found");
 
-            const deleteResponse = await fetch(`http://localhost:5000/api/services/${service._id}`, {
+            const deleteResponse = await fetch(`${API_BASE}/api/services/${service._id}`, {
                 method: "DELETE",
                 credentials: "include",
             });
@@ -468,7 +469,7 @@ function Dashboard() {
         if (!customerName.trim() || !activeServiceName.trim()) return;
         setAddingCustomer(true);
         try {
-            const response = await fetch("http://localhost:5000/api/queue", {
+            const response = await fetch(`${API_BASE}/api/queue`, {
                 method: "POST",
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
@@ -495,7 +496,7 @@ function Dashboard() {
     // Status Change
     async function handleStatusChange(id, status) {
         try {
-            const response = await fetch(`http://localhost:5000/api/queue/${id}/status`, {
+            const response = await fetch(`${API_BASE}/api/queue/${id}/status`, {
                 method: "PATCH",
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
@@ -519,7 +520,7 @@ function Dashboard() {
         }
         setCallingNextLoading(true);
         try {
-            const res = await fetch("http://localhost:5000/api/queue/call-next", {
+            const res = await fetch(`${API_BASE}/api/queue/call-next`, {
                 method: "POST",
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
@@ -550,7 +551,7 @@ function Dashboard() {
         setStaffLoading(true);
         setStaffMessage("");
         try {
-            const res = await fetch("http://localhost:5000/api/staff/invite", {
+            const res = await fetch(`${API_BASE}/api/staff/invite`, {
                 method: "POST",
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
@@ -579,7 +580,7 @@ function Dashboard() {
     async function handleRevokeInvite(id) {
         if (!window.confirm("Are you sure you want to revoke this staff invite code?")) return;
         try {
-            const res = await fetch(`http://localhost:5000/api/staff/invite/${id}`, {
+            const res = await fetch(`${API_BASE}/api/staff/invite/${id}`, {
                 method: "DELETE",
                 credentials: "include",
             });
@@ -606,7 +607,7 @@ function Dashboard() {
         }
         setReassignLoading(true);
         try {
-            const res = await fetch(`http://localhost:5000/api/staff/${reassignStaffTarget._id}/reassign`, {
+            const res = await fetch(`${API_BASE}/api/staff/${reassignStaffTarget._id}/reassign`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
@@ -633,7 +634,7 @@ function Dashboard() {
     async function handleRemoveStaff(id, name) {
         if (!window.confirm(`Are you sure you want to remove staff member "${name}"?`)) return;
         try {
-            const res = await fetch(`http://localhost:5000/api/staff/${id}`, {
+            const res = await fetch(`${API_BASE}/api/staff/${id}`, {
                 method: "DELETE",
                 credentials: "include",
             });
@@ -645,7 +646,7 @@ function Dashboard() {
 
     async function handleLogout() {
         try {
-            await fetch("http://localhost:5000/api/auth/logout", {
+            await fetch(`${API_BASE}/api/auth/logout`, {
                 method: "POST",
                 credentials: "include",
             });

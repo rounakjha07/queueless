@@ -1,3 +1,4 @@
+import { API_BASE } from "../config/api.js";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -48,7 +49,7 @@ function Login() {
         try {
             const portalType = loginTab === "customer" ? "customer" : "staff_provider";
             const response = await fetch(
-                "http://localhost:5000/api/auth/login",
+                `${API_BASE}/api/auth/login`,
                 {
                     method: "POST",
                     headers: {
@@ -91,7 +92,7 @@ function Login() {
         setLoading(true);
 
         try {
-            const res = await fetch("http://localhost:5000/api/auth/customer/send-otp", {
+            const res = await fetch(`${API_BASE}/api/auth/customer/send-otp`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -128,7 +129,7 @@ function Login() {
         setLoading(true);
 
         try {
-            const res = await fetch("http://localhost:5000/api/auth/customer/verify-otp", {
+            const res = await fetch(`${API_BASE}/api/auth/customer/verify-otp`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",

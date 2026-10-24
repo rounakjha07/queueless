@@ -1,3 +1,4 @@
+import { API_BASE } from "../config/api.js";
 import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { playChime } from "../utils/audioChime";
@@ -75,7 +76,7 @@ export default function CustomerPortal() {
   useEffect(() => {
     async function checkAuth() {
       try {
-        const res = await fetch("http://localhost:5000/api/auth/me", {
+        const res = await fetch(`${API_BASE}/api/auth/me`, {
           credentials: "include",
         });
         const data = await res.json();
@@ -107,7 +108,7 @@ export default function CustomerPortal() {
   // Fetch 100% accurate live queue status
   async function fetchLiveStatus() {
     try {
-      const res = await fetch("http://localhost:5000/api/queue/customer-live-status", {
+      const res = await fetch(`${API_BASE}/api/queue/customer-live-status`, {
         credentials: "include",
       });
       const data = await res.json();
@@ -124,7 +125,7 @@ export default function CustomerPortal() {
       }
 
       // Fetch past token history
-      const historyRes = await fetch("http://localhost:5000/api/queue/my-tokens", {
+      const historyRes = await fetch(`${API_BASE}/api/queue/my-tokens`, {
         credentials: "include",
       });
       const historyData = await historyRes.json();
@@ -139,7 +140,7 @@ export default function CustomerPortal() {
   // Fetch explore services across all providers
   async function fetchExploreServices() {
     try {
-      const res = await fetch("http://localhost:5000/api/queue/explore");
+      const res = await fetch(`${API_BASE}/api/queue/explore`);
       const data = await res.json();
       if (res.ok && data.services) {
         setServices(data.services);
@@ -170,7 +171,7 @@ export default function CustomerPortal() {
     setOtpLoading(true);
 
     try {
-      const res = await fetch("http://localhost:5000/api/auth/customer/send-otp", {
+      const res = await fetch(`${API_BASE}/api/auth/customer/send-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -205,7 +206,7 @@ export default function CustomerPortal() {
     setOtpLoading(true);
 
     try {
-      const res = await fetch("http://localhost:5000/api/auth/customer/verify-otp", {
+      const res = await fetch(`${API_BASE}/api/auth/customer/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -250,7 +251,7 @@ export default function CustomerPortal() {
         throw new Error("Aap kisi service me enrolled nahi ho. Kripya valid token number darj karein (e.g. 5 ya A-005).");
       }
 
-      const res = await fetch(`http://localhost:5000/api/queue/track-public?tokenNumber=${parsed}`);
+      const res = await fetch(`${API_BASE}/api/queue/track-public?tokenNumber=${parsed}`);
       const data = await res.json();
       if (!res.ok || !data.success || !data.token) {
         throw new Error(data.message || `Aap kisi service me enrolled nahi ho. Token #${parsed} ka koi active record nahi mila.`);
@@ -273,7 +274,7 @@ export default function CustomerPortal() {
     setCustomerLoginError("");
     setCustomerLoginLoading(true);
     try {
-      const res = await fetch("http://localhost:5000/api/auth/login", {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -284,7 +285,7 @@ export default function CustomerPortal() {
         throw new Error(data.message || "Invalid email or password.");
       }
       if (data.user.role !== "customer") {
-        await fetch("http://localhost:5000/api/auth/logout", { method: "POST", credentials: "include" });
+        await fetch(`${API_BASE}/api/auth/logout`, { method: "POST", credentials: "include" });
         throw new Error("Yeh portal sirf Customers ke liye hai. Staff aur Manager accounts yaha login nahi kar sakte.");
       }
       setUser(data.user);
@@ -300,7 +301,7 @@ export default function CustomerPortal() {
     setBookingLoading(true);
     setFeedbackMsg("");
     try {
-      const res = await fetch("http://localhost:5000/api/queue/book", {
+      const res = await fetch(`${API_BASE}/api/queue/book`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -329,7 +330,7 @@ export default function CustomerPortal() {
   // Handle Customer Logout / Switch Token
   async function handleLogout() {
     try {
-      await fetch("http://localhost:5000/api/auth/logout", {
+      await fetch(`${API_BASE}/api/auth/logout`, {
         method: "POST",
         credentials: "include",
       });

@@ -1,3 +1,4 @@
+import { API_BASE } from "../config/api.js";
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { playChime } from "../utils/audioChime";
@@ -26,8 +27,8 @@ export default function DisplayBoard() {
   async function fetchLiveBoard() {
     try {
       const url = providerId
-        ? `http://localhost:5000/api/queue/board?provider=${encodeURIComponent(providerId)}`
-        : "http://localhost:5000/api/queue/board";
+        ? `${API_BASE}/api/queue/board?provider=${encodeURIComponent(providerId)}`
+        : `${API_BASE}/api/queue/board`;
 
       const res = await fetch(url, { credentials: "include" });
       const data = await res.json();

@@ -1,3 +1,4 @@
+import { API_BASE } from "../config/api.js";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { playChime } from "../utils/audioChime";
@@ -24,7 +25,7 @@ export default function StaffPortal() {
   useEffect(() => {
     async function fetchUser() {
       try {
-        const res = await fetch("http://localhost:5000/api/auth/me", {
+        const res = await fetch(`${API_BASE}/api/auth/me`, {
           credentials: "include",
         });
         const data = await res.json();
@@ -49,7 +50,7 @@ export default function StaffPortal() {
   // Fetch counter status & queue
   async function fetchCounterStatus() {
     try {
-      const res = await fetch("http://localhost:5000/api/staff/my-counter", {
+      const res = await fetch(`${API_BASE}/api/staff/my-counter`, {
         credentials: "include",
       });
       const data = await res.json();
@@ -89,7 +90,7 @@ export default function StaffPortal() {
     setActionLoading(true);
     setStatusMessage("");
     try {
-      const res = await fetch("http://localhost:5000/api/queue/call-next", {
+      const res = await fetch(`${API_BASE}/api/queue/call-next`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -113,7 +114,7 @@ export default function StaffPortal() {
   async function handleUpdateStatus(id, newStatus) {
     setActionLoading(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/queue/${id}/status`, {
+      const res = await fetch(`${API_BASE}/api/queue/${id}/status`, {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -138,7 +139,7 @@ export default function StaffPortal() {
     if (!walkinName.trim()) return;
     setActionLoading(true);
     try {
-      const res = await fetch("http://localhost:5000/api/queue", {
+      const res = await fetch(`${API_BASE}/api/queue`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -163,7 +164,7 @@ export default function StaffPortal() {
   }
 
   async function handleLogout() {
-    await fetch("http://localhost:5000/api/auth/logout", {
+    await fetch(`${API_BASE}/api/auth/logout`, {
       method: "POST",
       credentials: "include",
     });
